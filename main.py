@@ -12,5 +12,4 @@ if __name__ == '__main__':
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         init_scheduler(app)
         init_location_scheduler(app)
-
-    app.run()
+    app.run(debug=True)

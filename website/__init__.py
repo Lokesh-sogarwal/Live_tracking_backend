@@ -6,13 +6,19 @@ from website.get_data import get_data
 from flask_cors import CORS
 from website.database_utils import db
 import os
+import pymysql
+
+# Use pymysql as MySQLdb
+pymysql.install_as_MySQLdb()
 
 DB_NAME = "hackathon"
 
 def create_app():
     APP_SECRET_KEY = '--Hackathon@inovatrix@-@2580#1234--'
     app = Flask(__name__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql://root@localhost/{DB_NAME}'
+
+    # Correct SQLAlchemy URI with URL-encoded password
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://root:Lok%402004@localhost/{DB_NAME}'
     app.config['SECRET_KEY'] = APP_SECRET_KEY
     app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
     app.config['SESSION_COOKIE_SECURE'] = False

@@ -112,7 +112,7 @@ class Schedule(db.Model):
     route_id = db.Column(db.Integer, db.ForeignKey("routes.route_id", ondelete="CASCADE"), nullable=False)
     bus_id = db.Column(db.Integer, db.ForeignKey("buses.bus_id", ondelete="CASCADE"), nullable=False)
     driver_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    stop_id = db.Column(db.Integer, db.ForeignKey("stops.stop_id", ondelete="CASCADE"), nullable=False)
+    stop_id = db.Column(db.Integer, db.ForeignKey("stops.stop_id", ondelete="CASCADE"), nullable=True)
     arrival_time = db.Column(db.DateTime, nullable=False)
     departure_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(50), default="on_time")
