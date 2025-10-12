@@ -180,7 +180,7 @@ def driver_detail():
                 role = role_obj.role_name if role_obj else None
 
             # ✅ Skip users with role Driver
-            if role == "Driver":
+            if role == "driver":
             # ✅ Only append if not Driver
                 users_list.append({
                     "user_uuid": user.user_id,
@@ -321,3 +321,5 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
