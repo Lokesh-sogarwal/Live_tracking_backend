@@ -1,7 +1,7 @@
+import dbm.sqlite3
 import os
 from functools import wraps
 import random
-
 import openrouteservice
 import requests
 from openrouteservice import convert
@@ -13,6 +13,7 @@ from  website.auth import token_required,decode_token
 import jwt
 # from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+
 
 view = Blueprint('view',__name__)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "docx"}
@@ -322,4 +323,36 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
+@view.route('/submit_feedback',methods=["POST"])
+def submit_feedback():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"Error","Token not verified"})
+
+    token = auth_header.split(" ")[1]  # Bearer <token>
+    user_id = decode_token(token)
+
+    user = User.query.filter_by(user_id =user_id).first()
+    current_user_id = user.id
+    current_user_email = user.email
+
+    if not current_user_id or not current_user_email:
+        return jsonify({"error": "User not logged in"}), 401
+
+    data = request.get_json()
+    feedback = data.get('feedback')
+
+    new_feed = Feedback(
+        user_id = current_user_id,
+        email = current_user_email,
+        message = feedback
+    )
+    db.session.add(new_feed)
+    db.session.commit()
+    if not feedback:
+        return jsonify({"error":"feedback is required"})
+
+    return jsonify({"Feedback":feedback
+    , "User":current_user_id,"email":current_user_email})
 
