@@ -110,6 +110,7 @@ def bus_route():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
 @bus.route('/get_routes', methods=["POST"])
 def get_routes():
     try:
@@ -237,7 +238,6 @@ def get_routes():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
 
 
 

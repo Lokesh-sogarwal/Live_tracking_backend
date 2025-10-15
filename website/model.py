@@ -136,6 +136,7 @@ class Feedback(db.Model):
     feedback_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     message = db.Column(db.Text, nullable=False)
+    email = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship("User", backref="feedbacks")
@@ -180,6 +181,7 @@ class DriverDocument(db.Model):
     upload_time = db.Column(db.DateTime, default=db.func.current_timestamp())
     expiry_date = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
+    is_rejected = db.Column(db.Boolean, default=False)
 
     __table_args__ = (db.UniqueConstraint('user_id', 'document_type', name='_user_document_uc'),)
 
