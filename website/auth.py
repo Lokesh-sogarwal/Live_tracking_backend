@@ -40,59 +40,62 @@ def login():
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400
 
-    # Fetch user
+    # 1. Fetch user safely
     user = User.query.filter_by(email=email).first()
     if not user:
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    # Fetch role
-    role_entry = UserRole.query.filter_by(user_id=user.id).first()
-    print(role_entry)
-
-    if role_entry:
-        role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
-        print(role_obj)
-
-    # Check password
+    # 2. Check if password matches
     if not check_password_hash(user.password, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    try:
-        # Save session data
-        session['email'] = user.email
-        session['user_id'] = user.user_id
-        session['role'] = role_obj.role_name if role_obj else "Passenger"
+    # 3. Role fetch safely
+    role_entry = UserRole.query.filter_by(user_id=user.id).first()
+    role_obj = Role.query.filter_by(role_id=role_entry.role_id).first() if role_entry else None
+    role_name = role_obj.role_name if role_obj else "Passenger"
 
-        # Generate JWT token
+    # 4. If already logged in → remove previous active record
+    active_user = Active_user.query.filter_by(user_id=user.id).first()
+    if active_user:
+        db.session.delete(active_user)
+        db.session.commit()
+
+    try:
+        # 5. Create JWT token
         token_payload = {
             'user_id': user.user_id,
             'is_password_change': user.is_password_change,
-            'role': session['role'],
+            'role': role_name,
             'exp': datetime.utcnow() + timedelta(hours=3)
         }
 
-        token = jwt.encode(token_payload, current_app.config['SECRET_KEY'], algorithm='HS256')
-        if isinstance(token, bytes):
-            token = token.decode('utf-8')
+        token = jwt.encode(
+            token_payload,
+            current_app.config['SECRET_KEY'],
+            algorithm='HS256'
+        )
 
-        # Only add to Active_user if password is changed
-        if user.is_password_change:
-            existing_active = Active_user.query.filter_by(user_id=user.user_id).first()
-            if not existing_active:
-                active_user = Active_user(
-                    user_id=user.id,
-                    email=user.email,
-                    fullname=user.fullname,
-                    role=role_obj.role_name
-                )
-                db.session.add(active_user)
-                db.session.commit()
+        # 6. Add to Active_user always (not only after password change)
+        new_active = Active_user(
+            user_id=user.id,
+            email=user.email,
+            fullname=user.fullname,
+            role=role_name
+        )
+        db.session.add(new_active)
+        db.session.commit()
 
-        # Return token
+        # 7. Store session
+        session['email'] = user.email
+        session['user_id'] = user.id
+        session['role'] = role_name
+
         return jsonify({'token': token}), 200
 
     except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
 
 @auth.route("/logout", methods=["POST"])
 @token_required
