@@ -2,9 +2,12 @@ from flask import Flask
 from flask_cors import CORS
 import os
 import pymysql
+from dotenv import load_dotenv
 
 from website.database_utils import db
-from website.extension import socketio  # Socket.IO initialized here
+from website.extension import socketio
+
+from config import Config  # ✅ production config loader
 
 # Import Blueprints
 from website.auth import auth
@@ -17,36 +20,33 @@ from website.chat import chat
 # Use pymysql as MySQLdb
 pymysql.install_as_MySQLdb()
 
-DB_NAME = "hackathon"
-
+load_dotenv()  # ✅ load .env file
 
 def create_app():
     app = Flask(__name__)
 
-    # ===========================
-    # APP CONFIG
-    # ===========================
-    app.config["SECRET_KEY"] = '--Hackathon@inovatrix@-@2580#1234--'
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"mysql+pymysql://root:Lok%402004@localhost/{DB_NAME}"
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    app.config["SESSION_COOKIE_SECURE"] = False
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+    # ===================
+    # LOAD CONFIG FROM ENV
+    # ===================
+    app.config.from_object(Config)
 
-    # Upload directory
-    upload_folder = os.path.join(os.getcwd(), "uploads")
+    # ===================
+    # INITIALIZE EXTENSIONS
+    # ===================
+    db.init_app(app)
+    socketio.init_app(app, cors_allowed_origins="*")  # Socket allows all origins ✅
+    CORS(app, supports_credentials=True)
+
+    # ===================
+    # SET UP UPLOAD FOLDER
+    # ===================
+    upload_folder = os.path.join(os.getcwd(), app.config["UPLOAD_FOLDER"])
     os.makedirs(upload_folder, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = upload_folder
 
-    # ===========================
-    # Initialize Extensions
-    # ===========================
-    db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*")   # ★ IMPORTANT FIX ★
-    CORS(app, supports_credentials=True)
-
-    # ===========================
-    # Register Blueprints
-    # ===========================
+    # ===================
+    # REGISTER BLUEPRINTS
+    # ===================
     app.register_blueprint(auth, url_prefix="/auth")
     app.register_blueprint(view, url_prefix="/view")
     app.register_blueprint(bus, url_prefix="/bus")
@@ -54,11 +54,15 @@ def create_app():
     app.register_blueprint(bot, url_prefix="/chatbot")
     app.register_blueprint(chat, url_prefix="/chat")
 
-    # ===========================
-    # Create Database Tables
-    # ===========================
+    # ===================
+    # CREATE DB TABLES
+    # ===================
     with app.app_context():
         db.create_all()
-        print("DataBase Tables Created ✅")
+        print("Database Tables Created ✅")
 
     return app
+
+app = create_app()  # ✅ create flask app instance
+if __name__ == "__main__":
+    socketio.run(app, debug=app.config["DEBUG"], port=app.config["PORT"])
