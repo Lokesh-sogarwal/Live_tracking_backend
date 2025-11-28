@@ -179,7 +179,7 @@ def init_scheduler(app):
             func=lambda: schedule_with_context(app),
             trigger='cron',
             hour=14,
-            minute=30
+            minute=54
         )
 
     scheduler.init_app(app)

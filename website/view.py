@@ -117,6 +117,7 @@ def profile():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
+
 @view.route('/delete', methods=['POST'])
 @token_required
 def delete_user():
@@ -249,6 +250,7 @@ def upload_document(user_id):
     return jsonify({"error": "Invalid file type"}), 400
 
 @view.route("/update_location", methods=["POST"])
+@token_required
 def update_location():
     data = request.get_json()
     bus_id = data.get("bus_id")
@@ -280,10 +282,11 @@ def update_location():
 
 
 @view.route("/get_location/<int:bus_id>", methods=["GET"])
+@token_required
 def get_location(bus_id):
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
+    # auth_header = request.headers.get('Authorization')
+    # if not auth_header:
+    #     return jsonify({'error': 'Authorization header missing'}), 401
 
     loc = BusLocation.query.filter_by(bus_id=bus_id).first()
     if loc:
@@ -296,6 +299,7 @@ def get_location(bus_id):
 
 
 @view.route("/api/get_route/<float:start_lat>/<float:start_lng>/<float:end_lat>/<float:end_lng>")
+@token_required
 def get_route(start_lat, start_lng, end_lat, end_lng):
     try:
         coords = [[start_lng, start_lat], [end_lng, end_lat]]
@@ -325,6 +329,7 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
 
 
 @view.route('/submit_feedback',methods=["POST"])
+@token_required
 def submit_feedback():
     auth_header = request.headers.get('Authorization')
     if not auth_header:
@@ -355,4 +360,3 @@ def submit_feedback():
 
     return jsonify({"Feedback":feedback
     , "User":current_user_id,"email":current_user_email})
-
