@@ -1,5 +1,5 @@
 [build]
-builder = "python"
+builder = "python3.10"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
