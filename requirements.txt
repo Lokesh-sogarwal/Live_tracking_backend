@@ -27,6 +27,8 @@ python-dotenv==1.2.1
 
 # ===== Scraping (optional but fine) =====
 beautifulsoup4==4.13.4
+Flask-APScheduler==1.13.1
+
 
 # ⚠ Removed for size + compatibility:
 # torch / torchvision / torchaudio / accelerate
