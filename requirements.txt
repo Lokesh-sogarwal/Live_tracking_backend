@@ -1,7 +1,7 @@
 Flask==3.1.1
 flask-cors==6.0.1
 Flask-Login==0.6.3
-PyJWT==2.10.1
+Flask-Mail==0.10.0
 Flask-SQLAlchemy==3.1.1
 Flask-SocketIO==5.5.1
 PyMySQL==1.1.2
@@ -13,5 +13,8 @@ wsproto==1.2.0
 requests==2.32.4
 beautifulsoup4==4.13.4
 python-dotenv==1.2.1
-transformers==4.48.0  # ✅ required for pipeline
+
+# ✅ ADD THIS LINE:
 openrouteservice==2.3.3
+PyJWT==2.10.1
+transformers==4.48.0
