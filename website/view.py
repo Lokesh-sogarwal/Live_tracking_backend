@@ -1,7 +1,7 @@
+import dbm.sqlite3
 import os
 from functools import wraps
 import random
-
 import openrouteservice
 import requests
 from openrouteservice import convert
@@ -13,6 +13,7 @@ from  website.auth import token_required,decode_token
 import jwt
 # from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+
 
 view = Blueprint('view',__name__)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "docx"}
@@ -116,6 +117,7 @@ def profile():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
+
 @view.route('/delete', methods=['POST'])
 @token_required
 def delete_user():
@@ -180,7 +182,7 @@ def driver_detail():
                 role = role_obj.role_name if role_obj else None
 
             # ✅ Skip users with role Driver
-            if role == "Driver":
+            if role == "driver":
             # ✅ Only append if not Driver
                 users_list.append({
                     "user_uuid": user.user_id,
@@ -248,6 +250,7 @@ def upload_document(user_id):
     return jsonify({"error": "Invalid file type"}), 400
 
 @view.route("/update_location", methods=["POST"])
+@token_required
 def update_location():
     data = request.get_json()
     bus_id = data.get("bus_id")
@@ -279,10 +282,11 @@ def update_location():
 
 
 @view.route("/get_location/<int:bus_id>", methods=["GET"])
+@token_required
 def get_location(bus_id):
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
+    # auth_header = request.headers.get('Authorization')
+    # if not auth_header:
+    #     return jsonify({'error': 'Authorization header missing'}), 401
 
     loc = BusLocation.query.filter_by(bus_id=bus_id).first()
     if loc:
@@ -295,6 +299,7 @@ def get_location(bus_id):
 
 
 @view.route("/api/get_route/<float:start_lat>/<float:start_lng>/<float:end_lat>/<float:end_lng>")
+@token_required
 def get_route(start_lat, start_lng, end_lat, end_lng):
     try:
         coords = [[start_lng, start_lat], [end_lng, end_lat]]
@@ -321,3 +326,37 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+@view.route('/submit_feedback',methods=["POST"])
+@token_required
+def submit_feedback():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"Error","Token not verified"})
+
+    token = auth_header.split(" ")[1]  # Bearer <token>
+    user_id = decode_token(token)
+
+    user = User.query.filter_by(user_id =user_id).first()
+    current_user_id = user.id
+    current_user_email = user.email
+
+    if not current_user_id or not current_user_email:
+        return jsonify({"error": "User not logged in"}), 401
+
+    data = request.get_json()
+    feedback = data.get('feedback')
+
+    new_feed = Feedback(
+        user_id = current_user_id,
+        email = current_user_email,
+        message = feedback
+    )
+    db.session.add(new_feed)
+    db.session.commit()
+    if not feedback:
+        return jsonify({"error":"feedback is required"})
+
+    return jsonify({"Feedback":feedback
+    , "User":current_user_id,"email":current_user_email})

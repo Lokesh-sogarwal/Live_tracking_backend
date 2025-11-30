@@ -113,12 +113,12 @@ def bus_route():
 
 @bus.route('/get_routes', methods=["POST"])
 def get_routes():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        print("[DEBUG] Missing Authorization header")
-        return jsonify({'error': 'Authorization header missing'}), 401
-
     try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            print("[DEBUG] Missing Authorization header")
+            return jsonify({'error': 'Authorization header missing'}), 401
+
         data = request.get_json(force=True)
         starting = data.get('starting_point')
         dest = data.get('destination')
@@ -129,13 +129,11 @@ def get_routes():
         print("[DEBUG] Destination:", dest)
 
         if not starting and not dest:
-            print("[DEBUG] No starting or destination provided")
-            return jsonify({"error": "Kindly give starting and/or destination"}), 400
+            return jsonify({"error": "Kindly provide starting and/or destination"}), 400
 
         # 🔍 Flexible partial + reverse search
         query = Route.query
         if starting and dest:
-            print("[DEBUG] Building filter with both starting and destination")
             query = query.filter(
                 and_(
                     or_(
@@ -148,73 +146,76 @@ def get_routes():
                     )
                 )
             )
-            print("[DEBUG] Applied filter: starting + destination")
         elif starting:
-            print("[DEBUG] Building filter with only starting")
             query = query.filter(
                 or_(
                     Route.start_point.ilike(f"%{starting}%"),
                     Route.end_point.ilike(f"%{starting}%")
                 )
             )
-            print("[DEBUG] Applied filter: only starting")
         elif dest:
-            print("[DEBUG] Building filter with only destination")
             query = query.filter(
                 or_(
                     Route.end_point.ilike(f"%{dest}%"),
                     Route.start_point.ilike(f"%{dest}%")
                 )
             )
-            print("[DEBUG] Applied filter: only destination")
 
-        # ✅ Fetch ALL matching routes (substring search)
-        print("[DEBUG] Executing query to fetch routes...")
         routes = query.all()
-        print("[DEBUG] Total routes found:", len(routes))
+        print(f"[DEBUG] Total routes found: {len(routes)}")
 
         if not routes:
-            print("[DEBUG] No route found in DB for given filters")
             return jsonify({"message": "No route found"}), 404
 
         final_response = []
 
-        for idx, route in enumerate(routes, start=1):
-            print(f"[DEBUG] Processing route {idx}/{len(routes)}: ID={route.route_id}, Name={route.route_name}")
+        for route in routes:
+            print(f"[DEBUG] Checking route: {route.route_name} (ID={route.route_id})")
 
+            # ✅ Only schedules without stop_id
             schedules = (
-                db.session.query(Schedule, Stop, Bus, User)
-                .outerjoin(Stop, Schedule.stop_id == Stop.stop_id)
+                db.session.query(Schedule, Bus, User)
                 .join(Bus, Schedule.bus_id == Bus.bus_id)
                 .join(User, Schedule.driver_id == User.id)
-                .filter(Schedule.route_id == route.route_id)
+                .filter(
+                    Schedule.route_id == route.route_id,
+                    Schedule.stop_id.is_(None)
+                )
                 .order_by(Schedule.arrival_time)
                 .all()
             )
-            print(f"[DEBUG] Schedules found for Route {route.route_id}: {len(schedules)}")
+
+            if not schedules:
+                print(f"[DEBUG] No schedules without stops for route {route.route_id}")
+                continue
 
             schedule_list = []
-            for sched_idx, (sched, stop, bus, driver) in enumerate(schedules, start=1):
+            for sched, bus, driver in schedules:
+                # ✅ Safe conversion for all time/date fields
+                def safe_format(dt):
+                    if dt is None:
+                        return None
+                    if isinstance(dt, str):
+                        return dt  # already a string
+                    try:
+                        return dt.strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        return str(dt)
+
                 schedule_data = {
                     "schedule_id": sched.schedule_id,
                     "bus_number": bus.bus_number,
                     "driver_name": driver.fullname,
                     "bus_id": bus.bus_id,
-                    "stop_id": stop.stop_id if stop else None,
-                    "stop_name": stop.name if stop else "No Stop",
-                    "stop_lat": stop.latitude if stop else None,
-                    "stop_lng": stop.longitude if stop else None,
-                    "sequence": stop.sequence if stop else None,
-                    "arrival_time": sched.arrival_time.strftime("%H:%M"),
-                    "departure_time": sched.departure_time.strftime("%H:%M") if sched.departure_time else None,
+                    "arrival_time": safe_format(sched.arrival_time),
+                    "departure_time": safe_format(sched.departure_time),
                     "status": sched.status,
-                    "date": sched.date,
+                    "date": safe_format(sched.date),
                     "is_reached": sched.is_reached
                 }
-                print(f"[DEBUG]   Schedule {sched_idx} added: {schedule_data}")
                 schedule_list.append(schedule_data)
 
-            response = {
+            final_response.append({
                 "route_id": route.route_id,
                 "route_name": route.route_name,
                 "start_lat": route.start_lat,
@@ -224,19 +225,20 @@ def get_routes():
                 "start_point": route.start_point,
                 "end_point": route.end_point,
                 "schedules": schedule_list
-            }
+            })
 
-            print(f"[DEBUG] Finished preparing response for Route {route.route_id}")
-            final_response.append(response)
+        if not final_response:
+            return jsonify({"message": "No routes found without stops"}), 404
 
-        print("[DEBUG] Final Response Prepared with", len(final_response), "routes")
+        print(f"[DEBUG] Final response with {len(final_response)} routes ready")
         return jsonify(final_response), 200
 
     except Exception as e:
         print("[ERROR] get_routes Exception:", str(e))
         import traceback
-        traceback.print_exc()  # ✅ full error trace for debugging
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 
 
@@ -321,6 +323,7 @@ def get_schedules():
             "departure_time": schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None,
             "status": schedule.status,
             "date": schedule.date,
+            "is_reached":schedule.is_reached
         }
         print("📌 Row:", result)
         results.append(result)

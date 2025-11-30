@@ -112,7 +112,7 @@ class Schedule(db.Model):
     route_id = db.Column(db.Integer, db.ForeignKey("routes.route_id", ondelete="CASCADE"), nullable=False)
     bus_id = db.Column(db.Integer, db.ForeignKey("buses.bus_id", ondelete="CASCADE"), nullable=False)
     driver_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    stop_id = db.Column(db.Integer, db.ForeignKey("stops.stop_id", ondelete="CASCADE"), nullable=False)
+    stop_id = db.Column(db.Integer, db.ForeignKey("stops.stop_id", ondelete="CASCADE"), nullable=True)
     arrival_time = db.Column(db.DateTime, nullable=False)
     departure_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(50), default="on_time")
@@ -136,6 +136,7 @@ class Feedback(db.Model):
     feedback_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     message = db.Column(db.Text, nullable=False)
+    email = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship("User", backref="feedbacks")
@@ -180,7 +181,27 @@ class DriverDocument(db.Model):
     upload_time = db.Column(db.DateTime, default=db.func.current_timestamp())
     expiry_date = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
+    is_rejected = db.Column(db.Boolean, default=False)
 
     __table_args__ = (db.UniqueConstraint('user_id', 'document_type', name='_user_document_uc'),)
 
     user = db.relationship("User", backref="driver_documents")
+
+class ChatMessage(db.Model):
+    __tablename__ = "chat_messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    message_id = db.Column(db.String(36), unique=True, default=lambda: str(uuid.uuid4()))  # Public UUID
+
+    sender_id = db.Column(db.String(36), db.ForeignKey("users.user_id"), nullable=False)   # user who sent
+    receiver_id = db.Column(db.String(36), db.ForeignKey("users.user_id"), nullable=False) # user who received
+
+    message = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    # Relationships
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_messages")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], backref="received_messages")
+
+    def __repr__(self):
+        return f"<ChatMessage from {self.sender_id} to {self.receiver_id}: {self.message[:20]}...>"

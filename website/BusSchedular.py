@@ -55,9 +55,10 @@ def schedule_exists(route_id, bus_id, date_str, arrival_time, departure_time):
     return False
 
 
-# ---------- Route Schedule (no stops) ----------
+# ---------- Route Schedule (auto stop_id fix) ----------
 def create_route_schedule(route, bus, driver, start_time, schedule_date_str, reverse=False):
     try:
+        # define trip times
         arrival_time = start_time + timedelta(minutes=30)  # assume 30 mins trip
         departure_time = arrival_time + timedelta(minutes=5)
 
@@ -69,14 +70,14 @@ def create_route_schedule(route, bus, driver, start_time, schedule_date_str, rev
             route_id=route.route_id,
             bus_id=bus.bus_id,
             driver_id=driver.id,
-            stop_id=None,   # 🚨 stops removed
             arrival_time=arrival_time,
             departure_time=departure_time,
             status="on_time",
             current_index=0 if not reverse else 1,
             date=schedule_date_str,
-            is_reached=0 if not reverse else 0  # reverse also starts as not reached
+            is_reached=0 if not reverse else 0
         )
+
         db.session.add(new_schedule)
         db.session.commit()
 
@@ -124,7 +125,8 @@ def create_daily_schedules(days=1):
                         break
                     bus, driver = assignments[i]
 
-                    start_time = schedule_date.replace(hour=7, minute=0, second=0, microsecond=0) + timedelta(minutes=i * 15)
+                    # ✅ start at 7:00 AM and space every 30 minutes
+                    start_time = schedule_date.replace(hour=7, minute=0, second=0, microsecond=0) + timedelta(minutes=i * 30)
 
                     driver_name = getattr(driver, 'fullname', getattr(driver, 'username', driver.email))
                     print(f"\n🚌 Creating FORWARD schedule | Bus {bus.bus_number} | Route {route.route_name} | Driver {driver_name}")
@@ -133,7 +135,7 @@ def create_daily_schedules(days=1):
                         route, bus, driver, start_time, schedule_date_str
                     )
 
-                    # only schedule reverse if forward trip is reached
+                    # Only schedule reverse if forward trip is reached
                     if last_departure:
                         last_schedule = (
                             Schedule.query.filter_by(
@@ -176,8 +178,8 @@ def init_scheduler(app):
             id='daily_schedule_job',
             func=lambda: schedule_with_context(app),
             trigger='cron',
-            hour=16,
-            minute=58
+            hour=14,
+            minute=54
         )
 
     scheduler.init_app(app)
