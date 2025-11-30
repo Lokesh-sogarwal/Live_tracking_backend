@@ -5,70 +5,59 @@ import pymysql
 
 from website.database_utils import db
 from website.extension import socketio
-
-# Import Blueprints
-from website.auth import auth
-from website.view import view
-from website.BusRoute import bus
-from website.get_data import get_data
-from website.chatbot import bot
-from website.chat import chat
+from config import Config # Make sure this path is correct
 
 pymysql.install_as_MySQLdb()
 
 def create_app():
     app = Flask(__name__)
 
-    # ===========================
-    # ✅ Read configs from env (Railway manages this)
-    # ===========================
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    # ===== CONFIG LOAD (Railway managed) =====
+    app.config.from_object(Config)
 
-    # ✅ Use Railway MySQL URL (injected from DB service)
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+    # ===== OPTIONAL: USE DATABASE URL DIRECTLY IF YOU WANT IT IN CODE =====
+    # Uncomment this only if you want to hardcode Railway URL (not recommended for security)
+    #
+    # app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://your-railway-url-here"
 
-    app.config["DEBUG"] = False
-    app.config["PORT"] = 5000
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB
+    # ===== Initialize extensions with protection =====
+    try:
+        db.init_app(app)
+        uri = os.getenv("DATABASE_URL")
+        if not uri:
+            print("⚠ DATABASE_URL missing — DB init skipped for test deploy")
+        else:
+            app.config["SQLALCHEMY_DATABASE_URI"] = uri
+            with app.app_context():
+                db.create_all()
+                print("✅ DB connected & tables created (Railway Managed)")
+    except Exception as e:
+        print("⚠ DB extension failed but container will continue:", e)
 
-    # ===========================
-    # ✅ Upload folder (lightweight)
-    # ===========================
-    upload_folder = os.path.join(os.getcwd(), os.getenv("UPLOAD_FOLDER", "uploads"))
-    os.makedirs(upload_folder, exist_ok=True)
-    app.config["UPLOAD_FOLDER"] = upload_folder
-
-    # ===========================
-    # ✅ Init extensions
-    # ===========================
-    db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*")
+
+    # ==== CORS ====
     CORS(app, supports_credentials=True)
 
-    # ===========================
-    # ✅ Register blueprints
-    # ===========================
+    # ===== Blueprint registration, skip bot AI if missing =====
+    from website.auth import auth
+    from website.view import view
+    from website.BusRoute import bus
+    from website.get_data import get_data
+    from website.chat import chat
+
     app.register_blueprint(auth, url_prefix="/auth")
     app.register_blueprint(view, url_prefix="/view")
     app.register_blueprint(bus, url_prefix="/bus")
     app.register_blueprint(get_data, url_prefix="/data")
-
-    # ⚠ AI/GPU part is skipped safely because `chatbot.py` now handles missing libs
-    app.register_blueprint(bot, url_prefix="/chatbot")
     app.register_blueprint(chat, url_prefix="/chat")
 
-    # ===========================
-    # ✅ Create DB tables only when DATABASE_URL exists
-    # ===========================
-    with app.app_context():
-        uri = os.getenv("DATABASE_URL")
-        if uri:   # Railway injects this, local deploy may not → so this protects container boot
-            try:
-                db.create_all()
-                print("DataBase Tables Created ✅ (via Railway-managed MySQL)")
-            except Exception as e:
-                print("⚠ DB Init Warning (table creation skipped):", e)
-        else:
-            print("⚠ DATABASE_URL not found locally — DB part skipped during deploy test")
+    # ===== Skip Chatbot AI while deploying =====
+    if False:  # Always False during deployment → bot AI will be skipped
+        try:
+            from website.chatbot import bot
+            app.register_blueprint(bot, url_prefix="/chatbot")
+        except:
+            print("⚠ chatbot AI skipped (torch/transformers not installed)")
 
     return app
