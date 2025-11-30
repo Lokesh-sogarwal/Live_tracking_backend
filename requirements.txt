@@ -18,3 +18,8 @@ python-dotenv==1.2.1
 openrouteservice==2.3.3
 PyJWT==2.10.1
 transformers==4.48.0
+torch==2.6.0        # ← ✅ works with Python 3.13 (CPU build)
+torchvision==0.21.0 # optional if needed
+torchaudio==2.6.0   # optional if needed
+
+
