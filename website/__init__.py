@@ -1,45 +1,36 @@
 from flask import Flask
 from flask_cors import CORS
-import os
-import pymysql
-
+from config import Config
 from website.database_utils import db
 from website.extension import socketio
-from config import Config # Make sure this path is correct
+import pymysql
+import os
 
 pymysql.install_as_MySQLdb()
 
 def create_app():
     app = Flask(__name__)
-
-    # ===== CONFIG LOAD (Railway managed) =====
     app.config.from_object(Config)
 
-    # ===== OPTIONAL: USE DATABASE URL DIRECTLY IF YOU WANT IT IN CODE =====
-    # Uncomment this only if you want to hardcode Railway URL (not recommended for security)
-    #
-    # app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://your-railway-url-here"
-
-    # ===== Initialize extensions with protection =====
+    # ========== DATABASE SETUP ==========
     try:
-        db.init_app(app)
-        uri = os.getenv("DATABASE_URL")
-        if not uri:
-            print("⚠ DATABASE_URL missing — DB init skipped for test deploy")
+        if not app.config.get("SQLALCHEMY_DATABASE_URI"):
+            print("❌ MySQL connection string (MYSQL_URI) not found!")
         else:
-            app.config["SQLALCHEMY_DATABASE_URI"] = uri
+            db.init_app(app)
             with app.app_context():
                 db.create_all()
-                print("✅ DB connected & tables created (Railway Managed)")
+            print("✅ Connected to MySQL & tables created!")
     except Exception as e:
-        print("⚠ DB extension failed but container will continue:", e)
+        print("❌ MySQL connection failed:", e)
 
+    # ========== SOCKET.IO ==========
     socketio.init_app(app, cors_allowed_origins="*")
 
-    # ==== CORS ====
+    # ========== CORS ENABLE ==========
     CORS(app, supports_credentials=True)
 
-    # ===== Blueprint registration, skip bot AI if missing =====
+    # ========== BLUEPRINTS ==========
     from website.auth import auth
     from website.view import view
     from website.BusRoute import bus
@@ -51,13 +42,5 @@ def create_app():
     app.register_blueprint(bus, url_prefix="/bus")
     app.register_blueprint(get_data, url_prefix="/data")
     app.register_blueprint(chat, url_prefix="/chat")
-
-    # ===== Skip Chatbot AI while deploying =====
-    if False:  # Always False during deployment → bot AI will be skipped
-        try:
-            from website.chatbot import bot
-            app.register_blueprint(bot, url_prefix="/chatbot")
-        except:
-            print("⚠ chatbot AI skipped (torch/transformers not installed)")
 
     return app
