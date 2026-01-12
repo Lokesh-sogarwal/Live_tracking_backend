@@ -25,26 +25,23 @@ def allowed_file(filename):
 @view.route('/user_details', methods=['GET'])
 @token_required
 def users_detail():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
+    # 🚀 Optimized Query: Fetch User + Role in one go
+    # Using outerjoin to include users without roles
+    try:
+        results = (
+            db.session.query(User, Role.role_name)
+            .outerjoin(UserRole, User.id == UserRole.user_id)
+            .outerjoin(Role, UserRole.role_id == Role.role_id)
+            .all()
+        )
 
-    users = User.query.all()
-    if users:
         users_list = []
-        for user in users:
-            # Get the user's role
-            role_entry = UserRole.query.filter_by(user_id=user.id).first()
-            role = None
-            if role_entry:
-                role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
-                role = role_obj.role_name if role_obj else None
-
+        for user, role_name in results:
             # ✅ Skip users with role Driver
-            if role == "Driver":
+            # Using case-insensitive check safely
+            if role_name and role_name.strip().lower() == "driver":
                 continue
 
-            # ✅ Only append if not Driver
             users_list.append({
                 "user_uuid": user.user_id,
                 "fullname": user.fullname,
@@ -52,20 +49,20 @@ def users_detail():
                 "fathername": getattr(user, "father_name", ""),
                 "mothername": getattr(user, "mother_name", ""),
                 "phone_no": user.phone_no,
-                "role": role
+                "role": role_name
             })
+        
         return jsonify(users_list)
-
-    return jsonify([])
+    except Exception as e:
+         print(f"Error fetching user details: {e}")
+         return jsonify({"error": "Failed to fetch user details"}), 500
 
 
 @view.route('/profile', methods=['GET', 'PUT'])
 @token_required
 def profile():
     auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
-
+    # already validated
     try:
         token = auth_header.split(" ")[1]  # Bearer <token>
         user_id = decode_token(token)
@@ -86,9 +83,9 @@ def profile():
             return jsonify({
                 'fullname': user.fullname,
                 'email': user.email,
-                # 'dob': user.dob,
-                # 'fathername': user.father_name,
-                # 'mothername': user.mother_name,
+                # 'dob': getattr(user, 'dob', None),
+                'fathername': getattr(user, 'father_name', ""),
+                'mothername': getattr(user, 'mother_name', ""),
                 'role': role,
                 'phone_no': user.phone_no
             }), 200
@@ -97,18 +94,20 @@ def profile():
             data = request.get_json()
             user.fullname = data.get('fullname', user.fullname)
             user.email = data.get('email', user.email)
-            user.dob = data.get('dob', user.dob)
-            user.father_name = data.get('fathername', user.father_name)
-            user.mother_name = data.get('mothername', user.mother_name)
+            # user.dob = data.get('dob', user.dob)
+            if hasattr(user, 'father_name'):
+                user.father_name = data.get('fathername', user.father_name)
+            if hasattr(user, 'mother_name'):
+                user.mother_name = data.get('mothername', user.mother_name)
 
             db.session.commit()
 
             return jsonify({
                 'fullname': user.fullname,
                 'email': user.email,
-                'dob': user.dob,
-                'fathername': user.father_name,
-                'mothername': user.mother_name,
+                # 'dob': user.dob,
+                'fathername': getattr(user, 'father_name', ""),
+                'mothername': getattr(user, 'mother_name', ""),
                 'phone_no': user.phone_no
             }), 200
 
@@ -125,6 +124,26 @@ def delete_user():
     user_uuid = data.get('user_uuid')
     if not user_uuid:
         return jsonify({"error": "Please provide User UUID"}), 400
+
+    # Permission Check
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(" ")[1]
+    requester_id = decode_token(token)
+    
+    # Check if requester is Admin
+    requester = User.query.filter_by(user_id=requester_id).first()
+    if not requester:
+         return jsonify({"error": "Requester not found"}), 403
+
+    requester_role_entry = UserRole.query.filter_by(user_id=requester.id).first()
+    is_admin = False
+    if requester_role_entry:
+        role_obj = Role.query.filter_by(role_id=requester_role_entry.role_id).first()
+        if role_obj and role_obj.role_name == "Admin": # Ensure "Admin" is correct case
+            is_admin = True
+    
+    if not is_admin:
+        return jsonify({"error": "Unauthorized: Admins only"}), 403
 
     user = User.query.filter_by(user_id=user_uuid).first()
     if not user:
@@ -143,6 +162,25 @@ def edit_user():
     print(user_uuid)
     if not user_uuid:
         return jsonify({"error": "Please provide User UUID"}), 400
+    
+    # Permission Check
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(" ")[1]
+    requester_id = decode_token(token)
+    
+    # Allow if editing self OR is Admin
+    if requester_id != user_uuid:
+        requester = User.query.filter_by(user_id=requester_id).first()
+        is_admin = False
+        if requester:
+            requester_role_entry = UserRole.query.filter_by(user_id=requester.id).first()
+            if requester_role_entry:
+                role_obj = Role.query.filter_by(role_id=requester_role_entry.role_id).first()
+                if role_obj and role_obj.role_name == "Admin":
+                    is_admin = True
+        
+        if not is_admin:
+             return jsonify({"error": "Unauthorized"}), 403
 
     user = User.query.filter_by(user_id=user_uuid).first()
     if not user:
@@ -150,40 +188,49 @@ def edit_user():
 
     user.fullname = data.get('fullname', user.fullname)
     user.email = data.get('email', user.email)
-    user.dob = data.get('dob', user.dob)
-    user.father_Name = data.get('fathername', user.father_Name)
-    user.mother_name = data.get('mothername', user.mother_name)
+    # user.dob = data.get('dob', user.dob)
+    # user.father_Name = data.get('fathername', user.father_Name) 
+    # user.mother_name = data.get('mothername', user.mother_name)
 
     db.session.commit()
     return jsonify({
         'fullname': user.fullname,
         'email': user.email,
-        'dob': user.dob,
-        'fathername': user.father_Name,
-        'mothername': user.mother_name
+        # 'dob': user.dob,
+        # 'fathername': user.father_Name,
+        # 'mothername': user.mother_name
     }), 200
 
 @view.route('/driver_details', methods=['GET'])
 @token_required
 def driver_detail():
     auth_header = request.headers.get('Authorization')
+    # already validated by token_required, but logic safe
     if not auth_header:
+        # Shouldn't happen due to decorator
         return jsonify({'error': 'Authorization header missing'}), 401
 
-    users = User.query.all()
-    if users:
-        users_list = []
-        for user in users:
-            # Get the user's role
-            role_entry = UserRole.query.filter_by(user_id=user.id).first()
-            role = None
-            if role_entry:
-                role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
-                role = role_obj.role_name if role_obj else None
+    try:
+        # Optimization: Fetch users JOINED with roles directly to avoid N+1 and filtering in python
+        # But keeping existing structure for now, just fixing logic
+        users = User.query.all()
+        if users:
+            users_list = []
+            for user in users:
+                # Get the user's role
+                role_entry = UserRole.query.filter_by(user_id=user.id).first()
+                role = None
+                if role_entry:
+                    role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
+                    role = role_obj.role_name if role_obj else None
 
-            # ✅ Skip users with role Driver
-            if role == "driver":
-            # ✅ Only append if not Driver
+                # ✅ Skip users with role Driver
+                # The original code skipped drivers. But this function is named 'driver_detail'.
+                # Logic Correction: If role is NOT driver, skip.
+                if not role or role.lower() != "driver":
+                    continue
+
+                # ✅ Only append if IS Driver
                 users_list.append({
                     "user_uuid": user.user_id,
                     "fullname": user.fullname,
@@ -194,6 +241,10 @@ def driver_detail():
                     "role": role
                 })
         return jsonify(users_list)
+
+    except Exception as e:
+        print("[ERROR] driver_details:", e)
+        return jsonify({"error": str(e)}), 500
 
     return jsonify([])
 @view.route('/upload/<string:user_id>', methods=['POST'])
@@ -284,10 +335,8 @@ def update_location():
 @view.route("/get_location/<int:bus_id>", methods=["GET"])
 @token_required
 def get_location(bus_id):
-    # auth_header = request.headers.get('Authorization')
-    # if not auth_header:
-    #     return jsonify({'error': 'Authorization header missing'}), 401
-
+    # auth_header check removed since @token_required handles it
+    
     loc = BusLocation.query.filter_by(bus_id=bus_id).first()
     if loc:
         return jsonify({
@@ -360,3 +409,83 @@ def submit_feedback():
 
     return jsonify({"Feedback":feedback
     , "User":current_user_id,"email":current_user_email})
+
+@view.route('/chat_users', methods=['GET'])
+@token_required
+def chat_users():
+    """Fetch all users except the current requesting user for the chat list."""
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        requester_id = decode_token(token)  # This is user_id (UUID string)
+
+        # Get current user's DB ID to exclude
+        current_user = User.query.filter_by(user_id=requester_id).first()
+        if not current_user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Fetch all users except current one
+        # Optimization: Select only needed fields
+        other_users = (
+            db.session.query(User)
+            .filter(User.id != current_user.id)
+            .all()
+        )
+
+        chat_list = []
+        for u in other_users:
+            # Optional: Get role if needed, or just basic info
+            chat_list.append({
+                "user_uuid": u.user_id,
+                "id": u.id,
+                "fullname": u.fullname,
+                "email": u.email
+            })
+
+        return jsonify(chat_list), 200
+
+    except Exception as e:
+        print(f"[ERROR] chat_users: {e}")
+        return jsonify({"error": "Failed to fetch chat users"}), 500
+
+@view.route('/notifications', methods=['GET'])
+@token_required
+def get_notifications():
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        user_uuid = decode_token(token)
+        
+        user = User.query.filter_by(user_id=user_uuid).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        notifications = Notification.query.filter_by(user_id=user.id).order_by(Notification.timestamp.desc()).all()
+        
+        return jsonify([{
+            "id": n.notification_id,
+            "message": n.message,
+            "type": n.type,
+            "timestamp": n.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_read": n.is_read
+        } for n in notifications]), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@view.route('/notifications/mark_read/<int:notif_id>', methods=['POST'])
+@token_required
+def mark_notification_read(notif_id):
+    try:
+        auth_header = request.headers.get('Authorization') 
+        # Token validation already done by decorator
+        
+        notif = Notification.query.get(notif_id)
+        if not notif:
+            return jsonify({"error": "Notification not found"}), 404
+            
+        notif.is_read = True
+        db.session.commit()
+        return jsonify({"message": "Marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

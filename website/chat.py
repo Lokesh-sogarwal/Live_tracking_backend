@@ -2,40 +2,20 @@
 import jwt
 from flask import Blueprint, jsonify, request
 from flask_socketio import emit, join_room, leave_room
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_, and_
 from website.extension import db, socketio
 from website.model import ChatMessage, User
-from website.auth import decode_token
+from website.auth import decode_token, token_required
 
 chat = Blueprint("chat", __name__)
-
-SECRET_KEY = "--Hackathon@inovatrix@-@2580#1234--"
-
 
 # =====================================================
 # Generate consistent room ID between two users (UUID)
 # =====================================================
 def get_room_id(user1_id, user2_id):
+    # Sort UUIDs so the room ID is always the same for pair (A, B)
     return "_".join(sorted([str(user1_id), str(user2_id)]))
-
-
-# =====================================================
-# Save chat message to database
-# =====================================================
-def save_message(sender_id, receiver_id, message):
-    sender = User.query.filter_by(user_id=sender_id).first()
-    receiver = User.query.filter_by(user_id=receiver_id).first()
-
-    if not sender or not receiver:
-        print("Sender:", sender_id, "Receiver:", receiver_id)
-        raise ValueError("Sender or Receiver does not exist!")
-
-    msg = ChatMessage(
-        sender_id=sender_id,
-        receiver_id=receiver_id,
-        message=message
-    )
-    db.session.add(msg)
-    db.session.commit()
 
 
 # =====================================================
@@ -44,107 +24,134 @@ def save_message(sender_id, receiver_id, message):
 
 @socketio.on("join")
 def handle_join(data):
-    sender_id = data["sender_id"]         # UUID
-    receiver_id = data["receiver_id"]     # UUID
-    room = get_room_id(sender_id, receiver_id)
+    """
+    User joins a chat room with another user.
+    emits 'history' event with recent messages for context.
+    """
+    try:
+        sender_id = data.get("sender_id")         # UUID
+        receiver_id = data.get("receiver_id")     # UUID
+        username = data.get("username", "User")
+        
+        if not sender_id or not receiver_id:
+            return
 
-    join_room(room)
+        room = get_room_id(sender_id, receiver_id)
+        join_room(room)
+        
+        # print(f"User {username} ({sender_id}) joined room {room}")
 
-    emit("message",
-         {"msg": f"{data['username']} joined the chat."},
-         room=room)
+        # OPTIMIZATION: Emit status only to others, not back to sender? 
+        # Actually standard chat "User joined" is often noise. 
+        # Uncomment if you want join notifications.
+        # emit("message", {"msg": f"{username} online"}, room=room)
+
+    except Exception as e:
+        print(f"Error in handle_join: {e}")
 
 
 @socketio.on("send_message")
 def handle_send_message(data):
-    sender_id = data["sender_id"]       # UUID
-    receiver_id = data["receiver_id"]   # UUID
-    message = data["msg"]
+    try:
+        sender_id = data.get("sender_id")       # UUID
+        receiver_id = data.get("receiver_id")   # UUID
+        message = data.get("msg")
+        
+        if not sender_id or not receiver_id or not message:
+            return
 
-    room = get_room_id(sender_id, receiver_id)
+        room = get_room_id(sender_id, receiver_id)
 
-    # Save to DB
-    save_message(sender_id, receiver_id, message)
+        # OPTIMIZATION: Insert directly without 2 pre-check SELECT queries.
+        # Foreign Key constraints ensure validity.
+        try:
+            msg = ChatMessage(
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+                message=message
+            )
+            db.session.add(msg)
+            db.session.commit()
 
-    # Broadcast message to room
-    emit("message",
-         {
-             "sender_id": sender_id,
-             "receiver_id": receiver_id,
-             "msg": message,
-         },
-         room=room)
+            # Broadcast message to room (including sender, for confirmation)
+            emit("message",
+                {
+                    "sender_id": sender_id,
+                    "receiver_id": receiver_id,
+                    "msg": message,
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+                },
+                room=room
+            )
+
+        except IntegrityError:
+            db.session.rollback()
+            print("Error: Message sender or receiver does not exist.")
+            emit("error", {"msg": "Invalid user ID"}, room=room)
+        except Exception as db_e:
+            db.session.rollback()
+            print(f"DB Error: {db_e}")
+
+    except Exception as e:
+        print(f"Error in handle_send_message: {e}")
 
 
 @socketio.on("leave")
 def handle_leave(data):
-    sender_id = data["sender_id"]
-    receiver_id = data["receiver_id"]
-    room = get_room_id(sender_id, receiver_id)
+    try:
+        sender_id = data.get("sender_id")
+        receiver_id = data.get("receiver_id")
+        
+        if not sender_id or not receiver_id:
+            return
 
-    leave_room(room)
+        room = get_room_id(sender_id, receiver_id)
+        leave_room(room)
 
-    emit("message",
-         {"msg": f"{data['username']} left the chat."},
-         room=room)
+    except Exception as e:
+        print(f"Error in handle_leave: {e}")
 
 
 # =====================================================
 # CHAT HISTORY API
 # =====================================================
 @chat.route("/history/<other_user_id>", methods=["GET"])
+@token_required
 def get_chat_history(other_user_id):
-    # -------------------------
-    # 1. Read Authorization
-    # -------------------------
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or " " not in auth_header:
-        return jsonify({"error": "Missing or invalid Authorization header"}), 401
+    try:
+        # Get Auth Token from header (validated by @token_required)
+        auth_header = request.headers.get("Authorization")
+        token = auth_header.split(" ")[1]
+        user_id = decode_token(token)
 
-    token = auth_header.split(" ")[1]
+        # OPTIMIZATION: Use a single query with OR condition
+        # Fetching 'other_user' existence check is skipped to save 1 query 
+        # (empty list returned if user doesn't exist or no chat)
+        
+        messages = (
+            db.session.query(ChatMessage)
+            .filter(
+                or_(
+                    and_(ChatMessage.sender_id == user_id, ChatMessage.receiver_id == other_user_id),
+                    and_(ChatMessage.sender_id == other_user_id, ChatMessage.receiver_id == user_id)
+                )
+            )
+            .order_by(ChatMessage.timestamp.asc())
+            .all()
+        )
 
-    # -------------------------
-    # 2. Decode token safely
-    # decode_token returns user_id (UUID)
-    # -------------------------
-    user_id = decode_token(token)
+        messages_list = [
+            {
+                "sender_id": msg.sender_id,
+                "receiver_id": msg.receiver_id,
+                "msg": msg.message,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else ""
+            }
+            for msg in messages
+        ]
 
-    if not user_id:
-        return jsonify({"error": "Invalid or expired token"}), 401
+        return jsonify(messages_list), 200
 
-    # -------------------------
-    # 3. Verify both users exist
-    # -------------------------
-    me = User.query.filter_by(user_id=user_id).first()
-    other_user = User.query.filter_by(user_id=other_user_id).first()
-
-    if not me:
-        return jsonify({"error": "Your user account not found"}), 404
-
-    if not other_user:
-        return jsonify({"error": "The user you're chatting with does not exist"}), 404
-
-    # -------------------------
-    # 4. Fetch messages between both users
-    # -------------------------
-    messages = ChatMessage.query.filter(
-        ((ChatMessage.sender_id == user_id) &
-         (ChatMessage.receiver_id == other_user_id)) |
-        ((ChatMessage.sender_id == other_user_id) &
-         (ChatMessage.receiver_id == user_id))
-    ).order_by(ChatMessage.timestamp.asc()).all()
-
-    # -------------------------
-    # 5. Format output
-    # -------------------------
-    messages_list = [
-        {
-            "sender_id": msg.sender_id,
-            "receiver_id": msg.receiver_id,
-            "msg": msg.message,
-            "timestamp": msg.timestamp.isoformat()
-        }
-        for msg in messages
-    ]
-
-    return jsonify(messages_list)
+    except Exception as e:
+        print(f"History Error: {e}")
+        return jsonify({"error": str(e)}), 500

@@ -21,7 +21,8 @@ def geocode_place(place_name):
         response = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": place_name, "format": "json", "limit": 1},
-            headers={"User-Agent": "BusApp/1.0"}
+            headers={"User-Agent": "BusApp/1.0"},
+            timeout=5
         )
         data = response.json()
         if not data:
@@ -38,7 +39,13 @@ def bus_route():
     if not auth_header:
         return jsonify({'error': 'Authorization header missing'}), 401
 
-    data = request.get_json()
+    try:
+        data = request.get_json(force=True, silent=True)
+        if not data:
+            return jsonify({'error': 'Invalid JSON body'}), 400
+    except Exception:
+         return jsonify({'error': 'Invalid JSON body'}), 400
+
     route_name = data.get('route_name')
     start_point_name = data.get('starting')
     end_point_name = data.get('destination')
@@ -112,16 +119,22 @@ def bus_route():
 
 
 @bus.route('/get_routes', methods=["POST"])
+@token_required
 def get_routes():
     try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            print("[DEBUG] Missing Authorization header")
-            return jsonify({'error': 'Authorization header missing'}), 401
-
+        # auth header validated by @token_required
+        
         data = request.get_json(force=True)
         starting = data.get('starting_point')
         dest = data.get('destination')
+
+        # ✅ FIXED: Extract only the main location name from the full address
+        # Example: "KR Puram, Bengaluru..." -> "KR Puram"
+        if starting and isinstance(starting, str):
+            starting = starting.split(',')[0].strip()
+        
+        if dest and isinstance(dest, str):
+            dest = dest.split(',')[0].strip()
 
         print("\n[DEBUG] ---- New Request ----")
         print("[DEBUG] Raw Input JSON:", data)
@@ -135,7 +148,7 @@ def get_routes():
         query = Route.query
         if starting and dest:
             query = query.filter(
-                and_(
+                or_(
                     or_(
                         Route.start_point.ilike(f"%{starting}%"),
                         Route.end_point.ilike(f"%{starting}%")
@@ -286,15 +299,14 @@ def geocode():
 @bus.route("/schedules", methods=["GET"])
 def get_schedules():
     date_filter = request.args.get("date")
-    print("🟢 Received request for schedules")
-    print("➡️ Date filter received:", date_filter)
-
+    # print("🟢 Received request for schedules")
+    
     # Base query with joins
     query = (
         db.session.query(Schedule, Bus, Route, Stop, User)
         .join(Bus, Schedule.bus_id == Bus.bus_id)
         .join(Route, Schedule.route_id == Route.route_id)
-        .outerjoin(Stop, Schedule.stop_id == Stop.stop_id)  # <-- outer join (stop can be NULL)
+        .outerjoin(Stop, Schedule.stop_id == Stop.stop_id)
         .join(User, Schedule.driver_id == User.id)
     )
 
@@ -305,11 +317,10 @@ def get_schedules():
             query = query.filter(Schedule.date == date_filter)
             print(f"✅ Filtering schedules by date: {date_filter}")
         except ValueError:
-            print("❌ Invalid date format received:", date_filter)
             return jsonify({"error": "Invalid date format, use YYYY-MM-DD"}), 400
 
     schedules = query.all()
-    print(f"🔍 Query returned {len(schedules)} rows")
+    # print(f"🔍 Query returned {len(schedules)} rows")
 
     results = []
     for schedule, bus, route, stop, driver in schedules:
@@ -323,9 +334,8 @@ def get_schedules():
             "departure_time": schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None,
             "status": schedule.status,
             "date": schedule.date,
-            "is_reached":schedule.is_reached
+            "is_reached": schedule.is_reached
         }
-        print("📌 Row:", result)
         results.append(result)
 
     return jsonify(results)

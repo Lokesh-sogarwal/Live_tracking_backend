@@ -2,12 +2,11 @@ from flask import Blueprint, current_app, jsonify
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
-from website.model import Schedule, BusLocation
+from website.model import Schedule, BusLocation, Notification
 from website.database_utils import db
 
 bus_sim = Blueprint("bus_sim", __name__)
 scheduler = BackgroundScheduler()
-scheduler.start()
 
 ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
 
@@ -66,6 +65,50 @@ def move_bus(schedule_id, app):
         if schedule.is_reached:
             return
 
+        # ⏳ Check for ETA/Ending Time Expiry
+        end_time = schedule.arrival_time
+        now = datetime.now()
+        
+        # Ensure end_time is comparable datetime
+        if isinstance(end_time, str):
+            try:
+                if len(end_time) < 10:
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    end_time = datetime.strptime(f"{today_str} {end_time}", "%Y-%m-%d %H:%M:%S")
+                else:
+                    end_time = datetime.strptime(str(end_time), "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass # Use raw if parsing fails
+
+        # Force completion if time exceeded
+        if isinstance(end_time, datetime) and now >= end_time:
+            print(f"⏱️ ETA Exceeded for Bus {schedule.bus_id}. Forcing completion.")
+            
+            # Snap to last coordinate
+            coords = get_route_coordinates(schedule)
+            if coords:
+                lat, lon = coords[-1]
+                loc = BusLocation.query.filter_by(bus_id=schedule.bus_id).first()
+                if loc:
+                    loc.latitude = lat
+                    loc.longitude = lon
+                else:
+                    loc = BusLocation(bus_id=schedule.bus_id, latitude=lat, longitude=lon)
+                    db.session.add(loc)
+                schedule.current_index = len(coords)
+            
+            schedule.is_reached = True
+            
+            # 🔔 Notification (Force Complete)
+            try:
+                msg = f"Trip Forced Complete: Bus {schedule.bus_id} exceeded ETA."
+                db.session.add(Notification(user_id=schedule.driver_id, message=msg, type="warning"))
+            except Exception as e:
+                print(f"Notif Error: {e}")
+
+            db.session.commit()
+            return
+
         coords = get_route_coordinates(schedule)
         bus_id = schedule.bus_id
 
@@ -73,6 +116,14 @@ def move_bus(schedule_id, app):
 
         if idx >= len(coords):
             schedule.is_reached = True
+            
+             # 🔔 Notification (Already Complete)
+            try:
+                msg = f"Trip Completed: Bus {schedule.bus_id} reached destination."
+                db.session.add(Notification(user_id=schedule.driver_id, message=msg, type="success"))
+            except Exception as e:
+                 print(f"Notif Error: {e}")
+
             db.session.commit()
             print(f"✅ Bus {bus_id} reached destination.")
             return
@@ -90,6 +141,12 @@ def move_bus(schedule_id, app):
         schedule.current_index = idx + 1
         if schedule.current_index >= len(coords):
             schedule.is_reached = True
+            # 🔔 Notification (Just Reached)
+            try:
+                msg = f"Trip Completed: Bus {schedule.bus_id} reached destination."
+                db.session.add(Notification(user_id=schedule.driver_id, message=msg, type="success"))
+            except Exception as e:
+                print(f"Notif Error: {e}")
 
         db.session.commit()
         # print(f"[{datetime.now().strftime('%H:%M:%S')}] Bus {bus_id} moved to {lat},{lon} (Index {schedule.current_index})")
@@ -120,20 +177,24 @@ def schedule_todays_buses(app):
             if scheduler.get_job(job_id):
                 continue  # Already scheduled
 
-            # ✅ Pick start time: prefer arrival_time, else departure_time
-            start_time = sched.arrival_time or sched.departure_time
+            # ✅ Pick start time: prefer departure_time (Start of Trip)
+            start_time = sched.departure_time or sched.arrival_time
             if isinstance(start_time, str):
-                start_time = datetime.strptime(f"{today_str} {start_time}", "%Y-%m-%d %H:%M:%S")
+                # If it's just a time string (HH:MM:SS), append correct date
+                if len(start_time) < 10: 
+                     start_time = datetime.strptime(f"{today_str} {start_time}", "%Y-%m-%d %H:%M:%S")
+                else:
+                     start_time = datetime.strptime(str(start_time), "%Y-%m-%d %H:%M:%S")
 
             scheduler.add_job(
                 move_bus,
                 'interval',
-                seconds=2,
+                seconds=10,
                 args=[sched.schedule_id, app],
                 id=job_id,
                 next_run_time=start_time
             )
-            print(f"🚌 Scheduled bus {sched.bus_id} (schedule {sched.schedule_id}) at {start_time}")
+            print(f"🚌 Scheduled bus {sched.bus_id} (schedule {sched.schedule_id}) at {start_time} (Update every 10s)")
 
 
 # -----------------------------
@@ -157,4 +218,8 @@ def get_bus_location(bus_id):
 # Initialize scheduler
 # -----------------------------
 def init_location_scheduler(app):
+    if not scheduler.running:
+        scheduler.start()
+        print("✅ Bus Simulation Scheduler Started")
+    
     schedule_todays_buses(app)

@@ -185,7 +185,8 @@ class DriverDocument(db.Model):
 
     __table_args__ = (db.UniqueConstraint('user_id', 'document_type', name='_user_document_uc'),)
 
-    user = db.relationship("User", backref="driver_documents")
+    # Adding primaryjoin to avoid ambiguity since FK is on non-PK column
+    user = db.relationship("User", backref="driver_documents", primaryjoin="DriverDocument.user_id==User.user_id")
 
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
@@ -200,8 +201,9 @@ class ChatMessage(db.Model):
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     # Relationships
-    sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_messages")
-    receiver = db.relationship("User", foreign_keys=[receiver_id], backref="received_messages")
+    # Adding primaryjoin since FK is on non-PK column
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_messages", primaryjoin="ChatMessage.sender_id==User.user_id")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], backref="received_messages", primaryjoin="ChatMessage.receiver_id==User.user_id")
 
     def __repr__(self):
         return f"<ChatMessage from {self.sender_id} to {self.receiver_id}: {self.message[:20]}...>"

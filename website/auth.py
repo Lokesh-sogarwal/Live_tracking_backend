@@ -15,12 +15,18 @@ def token_required(f):
             return jsonify({"error": "Authorization header missing"}), 401
 
         try:
-            token = auth_header.split(" ")[1]  # "Bearer token"
+            parts = auth_header.split(" ")
+            if len(parts) != 2 or parts[0].lower() != "bearer":
+                return jsonify({"error": "Invalid Authorization header format"}), 401
+            
+            token = parts[1]  # "Bearer token"
             decoded = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token expired"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
+        except Exception as e:
+            return jsonify({"error": f"Token error: {str(e)}"}), 401
 
         return f(*args, **kwargs)
     return decorated
@@ -33,34 +39,37 @@ def decode_token(token):
 
 @auth.route('/login', methods=["POST"])
 def login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-
-    if not email or not password:
-        return jsonify({'error': 'Email and password are required'}), 400
-
-    # 1. Fetch user safely
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    # 2. Check if password matches
-    if not check_password_hash(user.password, password):
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    # 3. Role fetch safely
-    role_entry = UserRole.query.filter_by(user_id=user.id).first()
-    role_obj = Role.query.filter_by(role_id=role_entry.role_id).first() if role_entry else None
-    role_name = role_obj.role_name if role_obj else "Passenger"
-
-    # 4. If already logged in → remove previous active record
-    active_user = Active_user.query.filter_by(user_id=user.id).first()
-    if active_user:
-        db.session.delete(active_user)
-        db.session.commit()
-
     try:
+        data = request.get_json(silent=True)
+        if not data:
+             return jsonify({'error': 'Invalid JSON or Content-Type header'}), 400
+
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        # 1. Fetch user safely
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        # 2. Check if password matches
+        if not check_password_hash(user.password, password):
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        # 3. Role fetch safely
+        role_entry = UserRole.query.filter_by(user_id=user.id).first()
+        role_obj = Role.query.filter_by(role_id=role_entry.role_id).first() if role_entry else None
+        role_name = role_obj.role_name if role_obj else "Passenger"
+
+        # 4. If already logged in → remove previous active record
+        active_user = Active_user.query.filter_by(user_id=user.id).first()
+        if active_user:
+            db.session.delete(active_user)
+            db.session.commit()
+
         # 5. Create JWT token
         token_payload = {
             'user_id': user.user_id,
@@ -93,7 +102,14 @@ def login():
         return jsonify({'token': token}), 200
 
     except Exception as e:
+        print(f"Login Error: {str(e)}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
+    except Exception as e:
         db.session.rollback()
+        print("❌ Login Error:")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -101,9 +117,7 @@ def login():
 @token_required
 def logout():
     auth_header = request.headers.get('Authorization')
-    if not auth_header or " " not in auth_header:
-        return jsonify({"error": "Missing or invalid Authorization header"}), 401
-
+    # already validated by token_required
     token = auth_header.split(" ")[1]
 
     try:
@@ -111,26 +125,22 @@ def logout():
     except Exception as e:
         return jsonify({"error": f"Invalid token: {str(e)}"}), 401
 
-    email = session.get('email')
-    user = User.query.filter_by(email=email).first()
+    # Find user by UUID from token instead of session email
+    user = User.query.filter_by(user_id=token_user_id).first()
 
     if not user:
         return jsonify({"error": "User does not exist"}), 404
 
-    if token_user_id != user.user_id:
-        return jsonify({"error": "Not a valid user"}), 403
-    active_user = Active_user.query.filter_by(user_id=user.user_id).first()
-    print(session.get('email'))
-    print(session.get('user_id'))
+    active_user = Active_user.query.filter_by(user_id=user.id).first()
+    
     if active_user:
         db.session.delete(active_user)
         db.session.commit()
+    
+    # clear session cookie if it exists (hybrid approach)
     session.clear()
 
-    #blacklist JWT so it can’t be reused
-    # save_token_to_blacklist(token)
-
-    print(f"User {user.fullname} logged out successfully")
+    print(f"User {user.fullname} logged out successfully (id: {user.user_id})")
 
     return jsonify({"message": "Logged out successfully"}), 200
 

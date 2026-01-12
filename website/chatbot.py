@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify
-import os, re, jwt, re
+from flask import Blueprint, request, jsonify, current_app
+import os, re
+import jwt
 from datetime import date
-import jwt  # for decoding token
 from website.model import User, Bus, BusLocation, Schedule, Stop
 
 bot = Blueprint('chatbot', __name__)
@@ -42,12 +42,13 @@ except ModuleNotFoundError:
 # ----------------------------------------------------
 def get_user_from_token(req):
     try:
+        from flask import current_app
         auth_header = req.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             return None
 
         token = auth_header.split(" ")[1]
-        payload = jwt.decode(token, os.getenv("SECRET_KEY"), algorithms=["HS256"])
+        payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
         user_id = payload.get("user_id")
         if not user_id:
             return None

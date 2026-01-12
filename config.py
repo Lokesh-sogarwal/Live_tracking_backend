@@ -21,3 +21,4 @@ class Config:
         print("❌ ERROR: No valid SQLALCHEMY_DATABASE_URI found!")
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
