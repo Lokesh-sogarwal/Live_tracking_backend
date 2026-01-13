@@ -434,12 +434,25 @@ def chat_users():
 
         chat_list = []
         for u in other_users:
-            # Optional: Get role if needed, or just basic info
+            # Compute unread count based on chat-type notifications
+            # sent to the current user mentioning this sender.
+            unread_count = (
+                db.session.query(Notification)
+                .filter(
+                    Notification.user_id == current_user.id,
+                    Notification.type == "chat",
+                    Notification.is_read == False,
+                    Notification.message.like(f"New message from {u.fullname}%")
+                )
+                .count()
+            )
+
             chat_list.append({
                 "user_uuid": u.user_id,
                 "id": u.id,
                 "fullname": u.fullname,
-                "email": u.email
+                "email": u.email,
+                "unread_messages": unread_count
             })
 
         return jsonify(chat_list), 200
@@ -486,6 +499,33 @@ def mark_notification_read(notif_id):
         notif.is_read = True
         db.session.commit()
         return jsonify({"message": "Marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@view.route('/notifications/mark_all_read', methods=['POST'])
+@token_required
+def mark_all_notifications_read():
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        user_uuid = decode_token(token)
+        
+        user = User.query.filter_by(user_id=user_uuid).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Update all unread notifications for this user
+        unread_notifications = Notification.query.filter_by(user_id=user.id, is_read=False).all()
+        
+        if not unread_notifications:
+             return jsonify({"message": "No unread notifications"}), 200
+
+        for notif in unread_notifications:
+            notif.is_read = True
+        
+        db.session.commit()
+        return jsonify({"message": "All notifications marked as read"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

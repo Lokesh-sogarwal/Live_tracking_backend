@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from website.database_utils import db
 from website.model import Route, Schedule, Stop, Bus, User, UserRole, Role
 from website.auth import token_required, decode_token
+from website.utils import notify_admins
 import jwt
 
 bus = Blueprint('bus', __name__)
@@ -97,6 +98,9 @@ def bus_route():
                 })
 
         db.session.commit()
+
+        # 🔔 Notify Admin
+        notify_admins(f"New Route Created: {route_name} ({start_point_name} → {end_point_name})", type="info")
 
         return jsonify({
             'message': 'Bus route created successfully',
@@ -220,8 +224,8 @@ def get_routes():
                     "bus_number": bus.bus_number,
                     "driver_name": driver.fullname,
                     "bus_id": bus.bus_id,
-                    "arrival_time": safe_format(sched.arrival_time),
-                    "departure_time": safe_format(sched.departure_time),
+                    "start_time": safe_format(sched.departure_time),
+                    "end_time": safe_format(sched.arrival_time),
                     "status": sched.status,
                     "date": safe_format(sched.date),
                     "is_reached": sched.is_reached
@@ -330,8 +334,8 @@ def get_schedules():
             "bus_number": bus.bus_number,
             "driver_name": driver.fullname,
             "stop_name": stop.name if stop else "N/A",  # handle NULL stop
-            "arrival_time": schedule.arrival_time.strftime("%H:%M") if schedule.arrival_time else None,
-            "departure_time": schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None,
+            "start_time": schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None,
+            "end_time": schedule.arrival_time.strftime("%H:%M") if schedule.arrival_time else None,
             "status": schedule.status,
             "date": schedule.date,
             "is_reached": schedule.is_reached

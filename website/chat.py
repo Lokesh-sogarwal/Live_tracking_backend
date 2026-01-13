@@ -5,8 +5,9 @@ from flask_socketio import emit, join_room, leave_room
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_, and_
 from website.extension import db, socketio
-from website.model import ChatMessage, User
+from website.model import ChatMessage, User, Notification
 from website.auth import decode_token, token_required
+from datetime import datetime
 
 chat = Blueprint("chat", __name__)
 
@@ -83,6 +84,39 @@ def handle_send_message(data):
                 },
                 room=room
             )
+            
+            # 🔔 Send Real-Time Notification to Receiver
+            try:
+                # 1. Fetch User details (need integer IDs for DB, names for displaying)
+                sender = User.query.filter_by(user_id=sender_id).first()
+                receiver = User.query.filter_by(user_id=receiver_id).first()
+
+                if sender and receiver:
+                    notif_msg = f"New message from {sender.fullname}"
+                    
+                    # 2. Save Notification to DB
+                    new_notif = Notification(
+                        user_id=receiver.id,
+                        message=notif_msg,
+                        type="chat"
+                    )
+                    db.session.add(new_notif)
+                    db.session.flush() # Generate ID
+                    db.session.commit()
+
+                    # 3. Emit Socket Event to Receiver's Notification Room
+                    socketio.emit("new_notification", {
+                        "id": new_notif.notification_id,
+                        "message": notif_msg,
+                        "type": "chat",
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "is_read": False,
+                        "sender_id": sender_id # Helpful data
+                    }, room=f"user_{receiver.user_id}")
+
+            except Exception as e:
+                print(f"Chat Notification Error: {e}")
+                # Don't rollback main session as message is already sent/committed
 
         except IntegrityError:
             db.session.rollback()
@@ -110,6 +144,22 @@ def handle_leave(data):
 
     except Exception as e:
         print(f"Error in handle_leave: {e}")
+
+
+@socketio.on("join_notifications")
+def join_notifications_room(data):
+    """
+    Allow user to join a personal room for real-time notifications.
+    Frontend should emit 'join_notifications' with { 'user_uuid': '...' }
+    """
+    try:
+        user_uuid = data.get("user_uuid")
+        if user_uuid:
+            room_name = f"user_{user_uuid}"
+            join_room(room_name)
+            # print(f"🔔 User {user_uuid} joined notification room: {room_name}")
+    except Exception as e:
+        print(f"Error joining notification room: {e}")
 
 
 # =====================================================

@@ -2,6 +2,7 @@ from functools import wraps
 
 from flask import Blueprint,request,jsonify,session,current_app
 from website.model import *
+from website.utils import notify_admins
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -175,6 +176,10 @@ def signup():
             user_role = UserRole(user_id=new_user.id, role_id=role.role_id)
             db.session.add(user_role)
             db.session.commit()
+
+            # 🔔 Notify Admin
+            notify_admins(f"New User Registered: {fullname} ({email}) as {role_name}", type="info")
+
             return jsonify({'message':'User and Role assigned Succesfully'}),200
 
     except Exception as e:

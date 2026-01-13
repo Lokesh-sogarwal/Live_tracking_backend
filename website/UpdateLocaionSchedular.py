@@ -4,6 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from website.model import Schedule, BusLocation, Notification
 from website.database_utils import db
+from website.utils import notify_admins
 
 bus_sim = Blueprint("bus_sim", __name__)
 scheduler = BackgroundScheduler()
@@ -65,8 +66,13 @@ def move_bus(schedule_id, app):
         if schedule.is_reached:
             return
 
+        # 🔄 When movement starts, mark schedule as running
+        if schedule.status != "running":
+            schedule.status = "running"
+
         # ⏳ Check for ETA/Ending Time Expiry
-        end_time = schedule.arrival_time
+        # NOTE: arrival_time = START, departure_time = END (ETA)
+        end_time = schedule.departure_time
         now = datetime.now()
         
         # Ensure end_time is comparable datetime
@@ -98,11 +104,13 @@ def move_bus(schedule_id, app):
                 schedule.current_index = len(coords)
             
             schedule.is_reached = True
+            schedule.status = "completed"
             
             # 🔔 Notification (Force Complete)
             try:
                 msg = f"Trip Forced Complete: Bus {schedule.bus_id} exceeded ETA."
                 db.session.add(Notification(user_id=schedule.driver_id, message=msg, type="warning"))
+                notify_admins(f"ALERT: Bus {schedule.bus_id} exceeded ETA and was force-completed.", type="warning")
             except Exception as e:
                 print(f"Notif Error: {e}")
 
@@ -116,6 +124,7 @@ def move_bus(schedule_id, app):
 
         if idx >= len(coords):
             schedule.is_reached = True
+            schedule.status = "completed"
             
              # 🔔 Notification (Already Complete)
             try:
@@ -141,10 +150,12 @@ def move_bus(schedule_id, app):
         schedule.current_index = idx + 1
         if schedule.current_index >= len(coords):
             schedule.is_reached = True
+            schedule.status = "completed"
             # 🔔 Notification (Just Reached)
             try:
                 msg = f"Trip Completed: Bus {schedule.bus_id} reached destination."
                 db.session.add(Notification(user_id=schedule.driver_id, message=msg, type="success"))
+                notify_admins(f"Trip Completed: Bus {schedule.bus_id} reached destination.", type="success")
             except Exception as e:
                 print(f"Notif Error: {e}")
 
@@ -177,8 +188,8 @@ def schedule_todays_buses(app):
             if scheduler.get_job(job_id):
                 continue  # Already scheduled
 
-            # ✅ Pick start time: prefer departure_time (Start of Trip)
-            start_time = sched.departure_time or sched.arrival_time
+            # ✅ Pick start time: arrival_time (Start of Trip)
+            start_time = sched.arrival_time or sched.departure_time
             if isinstance(start_time, str):
                 # If it's just a time string (HH:MM:SS), append correct date
                 if len(start_time) < 10: 
@@ -189,7 +200,7 @@ def schedule_todays_buses(app):
             scheduler.add_job(
                 move_bus,
                 'interval',
-                seconds=10,
+                seconds=4,
                 args=[sched.schedule_id, app],
                 id=job_id,
                 next_run_time=start_time
@@ -203,7 +214,28 @@ def schedule_todays_buses(app):
 @bus_sim.route("/get_location/<int:bus_id>")
 def get_bus_location(bus_id):
     loc = BusLocation.query.filter_by(bus_id=bus_id).first()
-    schedule = Schedule.query.filter_by(bus_id=bus_id, date=datetime.now().strftime("%Y-%m-%d")).first()
+    
+    # 🔍 Find the most relevant schedule for this bus today
+    # Prioritize: 1. Active (Not Reached) 2. Recently Reached
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    active_schedule = (
+        Schedule.query
+        .filter_by(bus_id=bus_id, date=today_str, is_reached=False)
+        .order_by(Schedule.departure_time.asc())
+        .first()
+    )
+
+    if not active_schedule:
+        # If no active schedule, get the last completed one to show status
+        schedule = (
+            Schedule.query
+            .filter_by(bus_id=bus_id, date=today_str)
+            .order_by(Schedule.departure_time.desc())
+            .first()
+        )
+    else:
+        schedule = active_schedule
 
     if not loc or not schedule:
         return jsonify({"message": "Bus not started yet"}), 404
@@ -211,7 +243,10 @@ def get_bus_location(bus_id):
     return jsonify({
         "latitude": loc.latitude,
         "longitude": loc.longitude,
-        "is_reached": schedule.is_reached
+        "is_reached": schedule.is_reached,
+        "schedule_id": schedule.schedule_id,
+        "route_start": schedule.route.start_point,
+        "route_end": schedule.route.end_point
     })
 
 # -----------------------------
