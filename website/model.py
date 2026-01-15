@@ -169,6 +169,24 @@ class UserRole(db.Model):
     user = db.relationship("User", backref="roles")
     role = db.relationship("Role", backref="users")
 
+
+# -----------------------
+# Role Permissions
+# -----------------------
+class RolePermission(db.Model):
+    __tablename__ = "role_permissions"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    role_id = db.Column(db.Integer, db.ForeignKey("roles.role_id", ondelete="CASCADE"), nullable=False)
+    feature_key = db.Column(db.String(100), nullable=False)
+    allowed = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("role_id", "feature_key", name="uq_role_permission_role_feature"),
+    )
+
+    role = db.relationship("Role", backref="permissions")
+
 # -----------------------
 # Driver Documents
 # -----------------------

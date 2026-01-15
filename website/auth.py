@@ -11,6 +11,10 @@ auth = Blueprint('auth',__name__)
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Allow CORS preflight requests to succeed without auth.
+        if request.method == "OPTIONS":
+            return jsonify({"ok": True}), 200
+
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return jsonify({"error": "Authorization header missing"}), 401
@@ -37,6 +41,10 @@ def decode_token(token):
     payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
     user_id = payload['user_id']
     return user_id
+
+
+def decode_token_payload(token):
+    return jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
 
 @auth.route('/login', methods=["POST"])
 def login():
