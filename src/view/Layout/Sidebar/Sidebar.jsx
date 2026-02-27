@@ -19,7 +19,7 @@ const Sidebar = () => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [userId, setUserId] = useState(null);
   const socketRef = useRef(null);
-  const { permissions } = usePermissions();
+  const { can } = usePermissions();
 
   // Update ref for socket callback and reset on chat visit
   useEffect(() => {
@@ -88,19 +88,13 @@ const Sidebar = () => {
     navigate(item.link);
   };
 
-  const isExplicit = (key) =>
-    !!(permissions && Object.prototype.hasOwnProperty.call(permissions, key));
-
   const isAllowed = (item) => {
     if (item.onlySuperadmin && normalizedRole !== "superadmin") return false;
 
     if (!item.permissionKey) return true;
 
-    if (isExplicit(item.permissionKey)) {
-      return !!permissions[item.permissionKey];
-    }
-
-    return legacyAllows(normalizedRole, item.permissionKey);
+    // Superadmin bypass lives in can().
+    return can(item.permissionKey);
   };
 
   const filteredItems = token

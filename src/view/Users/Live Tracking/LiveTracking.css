@@ -219,6 +219,43 @@
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 768px) {
+  .livetracking-container {
+    height: auto;
+    min-height: 70vh;
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  .search-card {
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .card-header h1 {
+    font-size: 1.6rem;
+  }
+
+  .input-wrapper input {
+    font-size: 1rem;
+  }
+
+  .suggestions-list {
+    left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-card {
+    padding: 18px;
+  }
+
+  .card-header p {
+    margin-bottom: 20px;
+  }
+}
+
 /* Button */
 .search-btn-large {
   width: 100%;

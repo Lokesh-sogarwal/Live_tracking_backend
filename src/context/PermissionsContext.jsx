@@ -24,7 +24,7 @@ export const PermissionsProvider = ({ children }) => {
 
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/permissions/my`, {
+      const permRes = await fetch(`${API_BASE_URL}/permissions/my`, {
         method: "GET",
         headers: {
           Authorization: "Bearer " + token,
@@ -32,15 +32,15 @@ export const PermissionsProvider = ({ children }) => {
         credentials: "include",
       });
 
-      if (!res.ok) {
+      if (permRes.ok) {
+        const data = await permRes.json();
+        setRole(data.role || "");
+        setPermissions(data.permissions || {});
+      } else {
         setRole("");
         setPermissions(null);
-        return;
       }
 
-      const data = await res.json();
-      setRole(data.role || "");
-      setPermissions(data.permissions || {});
     } catch (e) {
       setRole("");
       setPermissions(null);
@@ -57,6 +57,7 @@ export const PermissionsProvider = ({ children }) => {
     (featureKey) => {
       // Missing entries are treated as allowed to preserve existing behavior.
       if (!featureKey) return true;
+
       if (!permissions) return true;
       if (permissions[featureKey] === undefined) return true;
       return !!permissions[featureKey];

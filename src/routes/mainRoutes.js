@@ -25,10 +25,6 @@ import RegisterBus from '../view/Users/Bus/RegisterBus';
 import Notification from '../view/Users/Notification/Notification';
 import PermissionsPage from '../view/Users/Permissions/Permissions';
 
-
-
-
-
 export const userRoutes = [
   {
     id: 1,

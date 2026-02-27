@@ -169,4 +169,26 @@
   opacity: 0; /* consistent start state */
 }
 
+@media (max-width: 768px) {
+  .sidebar {
+    height: auto;
+    max-height: inherit;
+    border-right: none;
+  }
+
+  .sidebar .header {
+    position: sticky;
+    top: 0;
+  }
+
+  .sidebar-list {
+    padding: 12px 10px;
+  }
+
+  .cont {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+}
+
 /* Staggered Delay Generator handled in JSX via style */

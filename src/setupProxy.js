@@ -3,7 +3,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 module.exports = function(app) {
   // Proxy API requests to Flask Backend (Port 5001)
   app.use(
-    ['/view', '/auth', '/api'], 
+    ['/view', '/auth', '/api', '/billing'], 
     createProxyMiddleware({
       target: 'http://localhost:5001',
       changeOrigin: true,

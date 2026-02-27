@@ -1,8 +1,7 @@
-import { IoIosLogOut, IoIosSettings, IoIosNotifications } from "react-icons/io";
+import { IoIosLogOut, IoIosSettings } from "react-icons/io";
 import { CgProfile } from "react-icons/cg";
 import { Logout } from "../../utils/logout";
 import { BsDatabaseAdd } from "react-icons/bs";
-
 import { TbRouteSquare } from "react-icons/tb";
 
 

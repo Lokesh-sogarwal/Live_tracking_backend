@@ -165,6 +165,36 @@
   gap: 12px;
 }
 
+.plan-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.plan-pill.warn {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.plan-pill-name {
+  line-height: 1;
+}
+
+.plan-pill-days {
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.10);
+  color: #1e293b;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
@@ -206,5 +236,34 @@
   }
   .navbar-glass {
     padding: 10px 16px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .navbar-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .breadcrumb-container {
+    max-width: 60vw;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .breadcrumb-container::-webkit-scrollbar {
+    height: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .breadcrumb-container {
+    max-width: 55vw;
+    gap: 8px;
+  }
+  .breadcrumb-text {
+    display: none;
   }
 }

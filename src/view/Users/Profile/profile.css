@@ -238,5 +238,22 @@
   .profile-image {
       margin-bottom: 20px;
   }
+
+  .details {
+    width: 100%;
+    padding: 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .layout {
+    padding: 14px;
+    gap: 18px;
+  }
+
+  .details {
+    padding: 16px;
+    border-radius: 18px;
+  }
 }
 

@@ -1,49 +1,68 @@
 import React, { useEffect, useState } from "react";
 import "./all.css";
+import API_BASE_URL from "../../../../utils/config";
 
 const AllSchedules = ({ selectedDate }) => {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    setLoading(true);
-    const token = localStorage.getItem("token");
+  const toYYYYMMDD = (d) => {
+    if (!d) return "";
+    if (typeof d === "string") {
+      // If already in YYYY-MM-DD, keep it.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      const dd = new Date(d);
+      return isNaN(dd.getTime()) ? "" : dd.toISOString().slice(0, 10);
+    }
+    if (d instanceof Date) {
+      return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    }
+    const dd = new Date(d);
+    return isNaN(dd.getTime()) ? "" : dd.toISOString().slice(0, 10);
+  };
 
-    fetch("/bus/schedules", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch schedules");
-        return res.json();
-      })
-      .then((data) => {
-        setSchedules(data || []);
-      })
-      .catch((err) => {
-        console.error("❌ Error fetching schedules:", err);
-        setError("Failed to load schedules.");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+
+  const fetchSchedules = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const date = toYYYYMMDD(selectedDate) || toYYYYMMDD(new Date());
+      const url = `${API_BASE_URL}/bus/schedules?date=${encodeURIComponent(date)}`;
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch schedules");
+      }
+      setSchedules(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("❌ Error fetching schedules:", err);
+      setError("Failed to load schedules.");
+      setSchedules([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchSchedules();
+  }, [selectedDate]);
 
   if (loading) return <p className="loading">Loading schedules...</p>;
   if (error) return <p className="error">{error}</p>;
 
-  // Filter schedules based on selected date OR current date
-  const todayStr = new Date().toDateString();
+  const selectedYYYYMMDD = toYYYYMMDD(selectedDate) || toYYYYMMDD(new Date());
   const filteredSchedules = schedules.filter((sch) => {
-    if (!sch.date) return false;
-    
-    // Safety check for selectedDate
-    const selectedDateStr = selectedDate ? new Date(selectedDate).toDateString() : todayStr;
-    const scheduleDateStr = new Date(sch.date).toDateString();
-    
-    return scheduleDateStr === selectedDateStr || scheduleDateStr === todayStr;
+    if (!sch?.date) return false;
+    return String(sch.date).slice(0, 10) === selectedYYYYMMDD;
   });
 
   return (
@@ -52,7 +71,7 @@ const AllSchedules = ({ selectedDate }) => {
         <h3>Schedules</h3>
         <button
           className="refresh-btn"
-          onClick={() => window.location.reload()}
+          onClick={() => fetchSchedules()}
         >
           ⟳ Refresh
         </button>
@@ -76,18 +95,12 @@ const AllSchedules = ({ selectedDate }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredSchedules.map((sch) => (
-                <tr
-                  key={sch.schedule_id}
-                  className={
-                    selectedDate &&
-                    sch.date &&
-                    new Date(sch.date).toDateString() ===
-                      selectedDate.toDateString()
-                      ? "highlight-row"
-                      : ""
-                  }
-                >
+              {filteredSchedules.map((sch) => {
+                return (
+                  <tr
+                    key={sch.schedule_id}
+                    className={String(sch?.date || "").slice(0, 10) === selectedYYYYMMDD ? "highlight-row" : ""}
+                  >
                   
                   <td>{sch.route_name}</td>
                   <td>{sch.bus_number}</td>
@@ -108,8 +121,9 @@ const AllSchedules = ({ selectedDate }) => {
                   </td>
                   <td>{sch.date}</td>
                   <td>{sch.is_reached ? "✅" : "❌"}</td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

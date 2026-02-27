@@ -1,12 +1,13 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { usePermissions } from "../context/PermissionsContext";
-import { legacyAllows, normalizeRole } from "./legacyAccess";
+import { normalizeRole } from "./legacyAccess";
 
 const PermissionGate = ({ permissionKey, requireSuperadmin = false, children }) => {
   const token = localStorage.getItem("token");
-  const { isLoading, permissions } = usePermissions();
+  const { isLoading, can } = usePermissions();
+  const location = useLocation();
 
   let role = "";
   try {
@@ -29,15 +30,12 @@ const PermissionGate = ({ permissionKey, requireSuperadmin = false, children }) 
   }
 
   if (permissionKey) {
-    const hasExplicit =
-      permissions && Object.prototype.hasOwnProperty.call(permissions, permissionKey);
-
-    const allowed = hasExplicit
-      ? !!permissions[permissionKey]
-      : legacyAllows(normalizedRole, permissionKey);
-
-    if (!allowed) {
-      return <Navigate to="/dashboard" replace />;
+    // Plan gating + explicit permission gating (superadmin bypass lives inside can())
+    if (!can(permissionKey)) {
+      // Avoid redirect loops if the user is blocked from dashboard.
+      const currentPath = location?.pathname || "";
+      const fallback = currentPath.startsWith("/dashboard") ? "/profile" : "/dashboard";
+      return <Navigate to={fallback} replace />;
     }
   }
 

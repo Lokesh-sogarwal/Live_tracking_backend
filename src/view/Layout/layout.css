@@ -36,11 +36,29 @@
 /* Response to small screens */
 @media (max-width: 768px) {
   .layout-container {
-      flex-direction: column;
-      gap: 0;
+    flex-direction: column;
+    gap: 0;
+    height: 100dvh;
   }
   .side-bar-container {
-      width: 100%;
-      height: auto;
+    width: 100%;
+    height: auto;
+    max-height: 35dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: none;
+  }
+  .content-box {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .layout-container {
+    height: 100dvh;
+  }
+  .side-bar-container {
+    max-height: 40dvh;
   }
 }

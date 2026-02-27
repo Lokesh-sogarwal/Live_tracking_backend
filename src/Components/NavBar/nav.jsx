@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './nav.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
-import { FaHome, FaAngleRight, FaRegBell, FaUserCircle } from "react-icons/fa";
+import { FaHome, FaAngleRight, FaRegBell } from "react-icons/fa";
 import { CiSearch } from "react-icons/ci";
 import DropButton from '../dropdown-Button/dropdown';
 import { io } from "socket.io-client";
@@ -135,8 +135,9 @@ const Nav = () => {
                     <div className="user-profile-nav">
                         <div className="user-info">
                             <span className="user-name">{userName}</span>
-                            <span className="user-role">{userRole}</span>
+                                                        <span className="user-role">{userRole}</span>
                         </div>
+
                         <div className="profile-dropdown-wrapper">
                              <DropButton />
                         </div>
