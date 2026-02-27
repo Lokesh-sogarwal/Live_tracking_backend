@@ -225,3 +225,4 @@ class ChatMessage(db.Model):
 
     def __repr__(self):
         return f"<ChatMessage from {self.sender_id} to {self.receiver_id}: {self.message[:20]}...>"
+

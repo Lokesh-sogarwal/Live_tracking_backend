@@ -1,5 +1,6 @@
 
 import os
+import math
 from functools import wraps
 import random
 import openrouteservice
@@ -17,16 +18,37 @@ from datetime import datetime, timedelta
 
 view = Blueprint('view',__name__)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "docx"}
-ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
-client = openrouteservice.Client(key=ORS_API_KEY)
+ORS_API_KEY = os.getenv("ORS_API_KEY") or "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
+
+
+def _get_ors_client():
+    key = (
+        (current_app.config.get("ORS_API_KEY") if current_app else None)
+        or os.getenv("ORS_API_KEY")
+        or ORS_API_KEY
+    )
+    # openrouteservice.Client will raise if key is None/empty.
+    if not key:
+        return None
+    return openrouteservice.Client(key=key)
+
+
+def _haversine_meters(lat1, lng1, lat2, lng2):
+    r = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @view.route('/user_details', methods=['GET'])
 @token_required
 def users_detail():
-    # 🚀 Optimized Query: Fetch User + Role in one go
-    # Using outerjoin to include users without roles
+   
     try:
         results = (
             db.session.query(User, Role.role_name)
@@ -224,13 +246,13 @@ def driver_detail():
                     role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
                     role = role_obj.role_name if role_obj else None
 
-                # ✅ Skip users with role Driver
+                #Skip users with role Driver
                 # The original code skipped drivers. But this function is named 'driver_detail'.
                 # Logic Correction: If role is NOT driver, skip.
                 if not role or role.lower() != "driver":
                     continue
 
-                # ✅ Only append if IS Driver
+                # Only append if IS Driver
                 users_list.append({
                     "user_uuid": user.user_id,
                     "fullname": user.fullname,
@@ -353,6 +375,10 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
     try:
         coords = [[start_lng, start_lat], [end_lng, end_lat]]
 
+        client = _get_ors_client()
+        if client is None:
+            raise RuntimeError("ORS_API_KEY not configured")
+
         # Request route from ORS
         route_data = client.directions(
             coordinates=coords,
@@ -365,7 +391,7 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
         geom_str = route_data['routes'][0]['geometry']  # This is a string
         decoded = convert.decode_polyline(geom_str)
 
-        # Replace geometry with dict
+        # Replace geometry with dict (GeoJSON-style). Coordinates remain [lng, lat].
         route_data['routes'][0]['geometry'] = {
             "type": "LineString",
             "coordinates": decoded['coordinates']
@@ -374,7 +400,28 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
         return jsonify(route_data)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        # Fallback so UI can still draw a line when ORS is blocked/down.
+        # Keep shape consistent with ORS `format='json'` response.
+        try:
+            distance_m = _haversine_meters(start_lat, start_lng, end_lat, end_lng)
+            # Assume 30 km/h average speed for a rough ETA.
+            duration_s = int(distance_m / (30_000 / 3600)) if distance_m > 0 else 0
+        except Exception:
+            duration_s = 0
+
+        fallback = {
+            "routes": [
+                {
+                    "summary": {"duration": duration_s, "distance": 0},
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[start_lng, start_lat], [end_lng, end_lat]],
+                    },
+                }
+            ],
+            "warning": f"route_fallback_used: {str(e)}",
+        }
+        return jsonify(fallback), 200
 
 
 @view.route('/submit_feedback',methods=["POST"])

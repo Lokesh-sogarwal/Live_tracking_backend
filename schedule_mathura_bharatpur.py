@@ -15,8 +15,8 @@ with app.app_context():
     print("🔍 Looking for route Parichowk → Saket Metro...")
     route = (
         Route.query
-        .filter(Route.start_point.ilike('%K.R. Puram%'))
-        .filter(Route.end_point.ilike('%Yelahanka%'))
+        .filter(Route.start_point.ilike('%pari chowk%'))
+        .filter(Route.end_point.ilike('%saket metro%'))
         .first()
     )
 
@@ -27,7 +27,7 @@ with app.app_context():
         print(f"✅ Found route: {route.route_name} ({route.start_point} → {route.end_point})")
 
         # Pick first available bus
-        bus = Bus.query.filter_by(bus_id=25).first()
+        bus = Bus.query.first()
         if not bus:
             print("❌ No buses found in database.")
         else:
@@ -38,7 +38,7 @@ with app.app_context():
                 User.query
                 .join(UserRole, User.id == UserRole.user_id)
                 .join(Role, Role.role_id == UserRole.role_id)
-                .filter(Role.role_name == 'driver', User.id == 25)
+                .filter(Role.role_name == 'driver')
                 .first()
             )
 
@@ -47,8 +47,8 @@ with app.app_context():
             else:
                 print(f"👤 Using driver: {driver.fullname} (id={driver.id})")
 
-                # Set start time to today at 00:12 (12:12 AM)
-                start_time = today.replace(hour=1, minute=8, second=0, microsecond=0)
+                # Set start time to today at 10:08 (10:08 AM)
+                start_time = today.replace(hour=14, minute=17, second=0, microsecond=0)
                 print(f"⏰ Scheduling trip at: {start_time}")
 
                 end_time = create_route_schedule(route, bus, driver, start_time, schedule_date_str)

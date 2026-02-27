@@ -73,6 +73,11 @@ def create_app():
     from website.chat import chat
     from website.chatbot import bot
     from website.permissions import permissions
+    try:
+        from website.billing import billing  # type: ignore
+    except Exception as e:
+        billing = None
+        print("⚠ Billing module not available, skipping:", e)
 
     app.register_blueprint(auth, url_prefix="/auth")
     app.register_blueprint(view, url_prefix="/view")
@@ -81,5 +86,17 @@ def create_app():
     app.register_blueprint(chat, url_prefix="/chat")
     app.register_blueprint(bot, url_prefix="/chatbot")
     app.register_blueprint(permissions, url_prefix="/permissions")
+    if billing is not None:
+        app.register_blueprint(billing, url_prefix="/billing")
+
+    # Seed billing catalog (plans/addons) if needed
+    if billing is not None:
+        try:
+            with app.app_context():
+                from website.billing import seed_billing_catalog
+
+                seed_billing_catalog()
+        except Exception as e:
+            print("⚠ Billing seed skipped:", e)
 
     return app

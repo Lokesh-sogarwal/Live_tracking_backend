@@ -303,6 +303,13 @@ def geocode():
 @bus.route("/schedules", methods=["GET"])
 def get_schedules():
     date_filter = request.args.get("date")
+    include_route_details = (request.args.get("include_route_details") or "").strip() in {
+        "1",
+        "true",
+        "True",
+        "yes",
+        "YES",
+    }
     # print("🟢 Received request for schedules")
     
     # Base query with joins
@@ -326,20 +333,68 @@ def get_schedules():
     schedules = query.all()
     # print(f"🔍 Query returned {len(schedules)} rows")
 
+    route_stops_by_route_id = {}
+    if include_route_details and schedules:
+        route_ids = sorted({route.route_id for (_, _, route, _, _) in schedules if route and route.route_id})
+        if route_ids:
+            rows = (
+                db.session.query(
+                    Stop.route_id,
+                    Stop.stop_id,
+                    Stop.name,
+                    Stop.latitude,
+                    Stop.longitude,
+                    Stop.sequence,
+                )
+                .filter(Stop.route_id.in_(route_ids))
+                .order_by(Stop.route_id.asc(), Stop.sequence.asc())
+                .all()
+            )
+            for r_id, stop_id, name, lat, lng, seq in rows:
+                route_stops_by_route_id.setdefault(r_id, []).append(
+                    {
+                        "stop_id": stop_id,
+                        "stop_name": name,
+                        "latitude": lat,
+                        "longitude": lng,
+                        "sequence": seq,
+                    }
+                )
+
     results = []
     for schedule, bus, route, stop, driver in schedules:
+        route_stops = route_stops_by_route_id.get(route.route_id, []) if include_route_details else None
+
+        start_time = schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None
+        end_time = schedule.arrival_time.strftime("%H:%M") if schedule.arrival_time else None
+
         result = {
             "schedule_id": schedule.schedule_id,
+            "route_id": route.route_id,
             "route_name": route.route_name,
+            "start_point": getattr(route, "start_point", None),
+            "end_point": getattr(route, "end_point", None),
+            "start_lat": getattr(route, "start_lat", None),
+            "start_lng": getattr(route, "start_lng", None),
+            "end_lat": getattr(route, "end_lat", None),
+            "end_lng": getattr(route, "end_lng", None),
             "bus_number": bus.bus_number,
             "driver_name": driver.fullname,
             "stop_name": stop.name if stop else "N/A",  # handle NULL stop
-            "start_time": schedule.departure_time.strftime("%H:%M") if schedule.departure_time else None,
-            "end_time": schedule.arrival_time.strftime("%H:%M") if schedule.arrival_time else None,
+            "start_time": start_time,
+            "end_time": end_time,
+            # Backwards/Frontend-friendly aliases
+            "departure_time": start_time,
+            "arrival_time": end_time,
             "status": schedule.status,
             "date": schedule.date,
             "is_reached": schedule.is_reached
         }
+
+        if include_route_details:
+            result["route_stops"] = route_stops
+            result["route_stops_count"] = len(route_stops)
+
         results.append(result)
 
     return jsonify(results)

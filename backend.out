@@ -1,0 +1,68 @@
+[2026-02-15 22:00:59,667] ERROR in app: Exception on /realtime/delhi/live_buses [GET]
+Traceback (most recent call last):
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 903, in _error_catcher
+    yield
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 1049, in _raw_read
+    raise IncompleteRead(self._fp_bytes_read, self.length_remaining)
+urllib3.exceptions.IncompleteRead: IncompleteRead(196341 bytes read, 28827 more expected)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/models.py", line 820, in generate
+    yield from self.raw.stream(chunk_size, decode_content=True)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 1257, in stream
+    data = self.read(amt=amt, decode_content=decode_content)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 1149, in read
+    data = self._raw_read(amt)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 1027, in _raw_read
+    with self._error_catcher():
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/urllib3/response.py", line 927, in _error_catcher
+    raise ProtocolError(arg, e) from e
+urllib3.exceptions.ProtocolError: ('Connection broken: IncompleteRead(196341 bytes read, 28827 more expected)', IncompleteRead(196341 bytes read, 28827 more expected))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ~^^^^^^^^^^^^^^^^^
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/Live_tracking_backend/website/delhi_realtime.py", line 521, in delhi_live_buses
+    pb = _fetch_vehicle_positions(api_key=api_key, url=url)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/Live_tracking_backend/website/delhi_realtime.py", line 304, in _fetch_vehicle_positions
+    resp = requests.get(
+        url,
+    ...<5 lines>...
+        },
+    )
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/api.py", line 73, in get
+    return request("get", url, params=params, **kwargs)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/sessions.py", line 746, in send
+    r.content
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/models.py", line 902, in content
+    self._content = b"".join(self.iter_content(CONTENT_CHUNK_SIZE)) or b""
+                    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/lokesh/Desktop/Live_tracking_webApp/.venv/lib/python3.14/site-packages/requests/models.py", line 822, in generate
+    raise ChunkedEncodingError(e)
+requests.exceptions.ChunkedEncodingError: ('Connection broken: IncompleteRead(196341 bytes read, 28827 more expected)', IncompleteRead(196341 bytes read, 28827 more expected))
+Run time of job "daily_schedule_job (trigger: cron[hour='14', minute='50'], next run at: 2026-02-19 14:50:00 IST)" was missed by 5:03:32.937291
+Run time of job "daily_schedule_job (trigger: cron[hour='14', minute='50'], next run at: 2026-02-22 14:50:00 IST)" was missed by 4:53:14.970573
+Run time of job "daily_schedule_job (trigger: cron[hour='14', minute='50'], next run at: 2026-02-25 14:50:00 IST)" was missed by 0:30:19.065250

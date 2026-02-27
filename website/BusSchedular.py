@@ -220,8 +220,8 @@ def init_scheduler(app):
             id='daily_schedule_job',
             func=lambda: schedule_with_context(app),
             trigger='cron',
-            hour=00,
-            minute=16
+            hour=14,
+            minute=50
         )
 
     scheduler.init_app(app)
