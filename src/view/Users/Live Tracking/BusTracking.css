@@ -1,0 +1,250 @@
+.bus-tracking-container {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 24px;
+  height: 85vh;
+  margin: 0;
+  padding: 0 4px; /* Align with dashboard padding */
+  font-family: 'Poppins', sans-serif;
+  animation: fadeIn 0.8s ease-out;
+  overflow: hidden;
+  position: relative;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Map styling */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  z-index: 1;
+}
+
+/* Details section */
+.details-section {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: fit-content;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+/* Heading inside details */
+.details-section h2 {
+  margin-bottom: 8px;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+/* Driver image */
+.details-section .img-div {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.details-section .img-div img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Each detail row */
+.details-section p {
+  margin: 4px 0;
+  font-size: 0.95rem;
+  color: #475569;
+  line-height: 1.6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.details-section p:last-child {
+  border-bottom: none;
+}
+
+.details-section p b {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* Error messages */
+.details-section .error {
+  background: #fef2f2;
+  color: #ef4444;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 500;
+  text-align: center;
+  border: 1px solid #fee2e2;
+}
+
+/* Full-page loading state */
+.bus-tracking-loading {
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #1e293b;
+  font-family: 'Poppins', sans-serif;
+}
+
+.bus-tracking-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #0ea5e9;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Bus not started overlay */
+.bus-not-started-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.bus-not-started-card {
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+  padding: 16px 20px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 360px;
+}
+
+.bus-not-started-text h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.bus-not-started-text p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #cbd5f5;
+}
+
+.bus-not-started-animation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bus-road-line {
+  width: 110px;
+  height: 2px;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+  border-radius: 999px;
+}
+
+.bus-road-line .dot {
+  position: absolute;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  animation: roadDots 1.8s linear infinite;
+}
+
+.bus-not-started-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.bus-road-line .dot:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.bus-road-line .dot:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+@keyframes roadDots {
+  from { transform: translateX(-10px); opacity: 0; }
+  15% { opacity: 1; }
+  to { transform: translateX(120px); opacity: 0; }
+}
+
+.bus-not-started-bus {
+  width: 38px;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  animation: busFloat 2s ease-in-out infinite;
+}
+
+@keyframes busFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Map waiting container when backend status is 'yet to start' */
+.map-waiting-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .bus-tracking-container {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .leaflet-container {
+    height: 400px;
+    order: 2;
+  }
+
+  .details-section {
+    order: 1;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+}
