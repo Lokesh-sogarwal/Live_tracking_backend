@@ -1,0 +1,256 @@
+/* ===============================
+   Modern Dashboard Table Design
+==================================*/
+
+.schedule-card {
+  background: #ffffff;
+  border-radius: 16px; /* Slightly squarer for 'crisp' feel */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Clean, low shadow */
+  padding: 30px;
+  width: 100%;
+  transition: all 0.2s ease-in-out;
+  border: 1px solid #eef2f6; /* Subtle border */
+}
+
+.schedule-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 15px;
+}
+
+.schedule-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.refresh-btn {
+  background: white;
+  color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.refresh-btn:hover {
+  background: #007bff;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+}
+
+.dash-schedule-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: separate; 
+  border-spacing: 0;
+}
+
+.schedule-table th {
+  text-align: left;
+  padding: 16px 20px;
+  background-color: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.schedule-table th:first-child {
+  border-top-left-radius: 8px;
+}
+.schedule-table th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.schedule-table td {
+  padding: 16px 20px;
+  color: #374151;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #f3f4f6;
+  white-space: nowrap;
+}
+
+.schedule-table tbody tr {
+  transition: background-color 0.2s;
+}
+
+.schedule-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.schedule-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Status Badge */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.status-green {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-red {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.status-gray {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+/* Table Container */
+.dash-schedule-table-container {
+  overflow-x: auto;
+  max-height: 450px;
+  border-radius: 12px;
+}
+
+/* Table Styling */
+.schedule-table {
+  width: 100%;
+  border-collapse: separate; /* Allows border-radius on rows */
+  border-spacing: 0 8px; /* Spacing between rows */
+  font-size: 0.95rem;
+}
+
+.schedule-table thead {
+  background: transparent;
+}
+
+.schedule-table th {
+  text-align: left;
+  padding: 0 16px 8px 16px;
+  color: #888;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: transparent !important; /* Overriding previous dark blue */
+}
+
+.schedule-table tbody tr {
+  background-color: #ffffff;
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s;
+  cursor: default;
+}
+
+.schedule-table td {
+  padding: 16px;
+  color: #444;
+  border-top: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f0f2f5;
+  font-weight: 500;
+}
+
+.schedule-table td:first-child {
+  border-left: 1px solid #f0f2f5;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.schedule-table td:last-child {
+  border-right: 1px solid #f0f2f5;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.schedule-table tbody tr:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); /* Card lift effect */
+  background-color: #ffffff !important;
+  z-index: 10;
+  position: relative;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.status-green {
+  background: rgba(0, 200, 81, 0.1);
+  color: #00a848;
+}
+
+.status-red {
+  background: rgba(255, 53, 71, 0.1);
+  color: #ff3547;
+}
+
+.status-gray {
+  background: #f0f2f5;
+  color: #888;
+}
+
+.status-red {
+  background: rgba(255, 64, 64, 0.12);
+  color: #d63333;
+}
+.status-gray {
+  background: rgba(108, 117, 125, 0.12);
+  color: #6c757d;
+}
+
+/* Other Styles */
+.loading {
+  color: #007bff;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 20px;
+}
+.error {
+  color: red;
+  text-align: center;
+  font-weight: 500;
+}
+.no-data {
+  color: #666;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Scrollbar */
+.schedule-table-container::-webkit-scrollbar {
+  height: 6px;
+}
+.schedule-table-container::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 6px;
+}
