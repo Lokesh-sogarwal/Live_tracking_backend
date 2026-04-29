@@ -1,33 +1,40 @@
-from flask import Blueprint, request, jsonify
-from transformers import pipeline
-import torch
+from flask import Blueprint, request, jsonify, current_app
+import os, re
 import jwt
 from datetime import date
-import re
-
-# Database models
-from website.model import (
-    User, Bus, BusLocation, Schedule, Stop
-)
+from website.model import User, Bus, BusLocation, Schedule, Stop
 
 bot = Blueprint('chatbot', __name__)
 
-# SAME SECRET KEY USED IN LOGIN
-SECRET_KEY = "--Hackathon@inovatrix@-@2580#1234--"
+# ----------------------------------------------------
+# ✅ SAFE BOT INITIALIZATION (skips AI model in deployment)
+# ----------------------------------------------------
+TRANSFORMERS_AVAILABLE = False
+chat_pipe = None
 
-print("Loading Llama 3.2 1B...")
+try:
+    import torch
+    from transformers import pipeline
 
-chat_pipe = pipeline(
-    "text-generation",
-    model="meta-llama/Llama-3.2-1B-Instruct",
-    device_map="cuda",
-    dtype=torch.float16,
-    max_new_tokens=200,
-    temperature=0.7,
-    repetition_penalty=1.1
-)
+    # Only load the model when TRANSFORMERS is available
+    TRANSFORMERS_AVAILABLE = True
 
-print("Llama 3.2 1B Loaded on GPU!")
+    print("Loading Llama 3.2 1B...")
+    chat_pipe = pipeline(
+        "text-generation",
+        model="meta-llama/Llama-3.2-1B-Instruct",
+        device_map="auto",        # ✅ works without GPU requirement
+        dtype=torch.float32,      # ✅ CPU-compatible
+        max_new_tokens=120,       # ✅ reduced size/footprint
+        temperature=0.6,
+        repetition_penalty=1.1
+    )
+    print("Llama Model Loaded on CPU!")
+
+except ModuleNotFoundError:
+    print("⚠ Transformers/Torch not installed — Bot AI will be skipped in deployment.")
+    TRANSFORMERS_AVAILABLE = False
+    chat_pipe = None
 
 
 # ----------------------------------------------------
@@ -35,15 +42,13 @@ print("Llama 3.2 1B Loaded on GPU!")
 # ----------------------------------------------------
 def get_user_from_token(req):
     try:
+        from flask import current_app
         auth_header = req.headers.get("Authorization")
-
         if not auth_header or not auth_header.startswith("Bearer "):
             return None
 
         token = auth_header.split(" ")[1]
-
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-
+        payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
         user_id = payload.get("user_id")
         if not user_id:
             return None
@@ -57,28 +62,33 @@ def get_user_from_token(req):
 
 # ----------------------------------------------------
 # HELPER: Extract bus number from free text
-# supports things like: "bus number KA-01-AB-1234"
-# or "schedules of bus KA-01-AB-1234 ?"
 # ----------------------------------------------------
-def extract_bus_number(raw_message: str) -> str | None:
-    # 1. Try to find explicit "bus number XYZ"
+def extract_bus_number(raw_message: str):
     match = re.search(r"bus number\s+([A-Za-z0-9\-]+)", raw_message, re.IGNORECASE)
     if match:
         return match.group(1).strip().upper()
 
-    # 2. Otherwise, pick any token that looks like a plate / has digits
     tokens = re.split(r"\s+", raw_message)
     candidates = []
     for t in tokens:
-        cleaned = re.sub(r"[^\w\-]", "", t)  # remove punctuation, keep letters/digits/-
+        cleaned = re.sub(r"[^\w\-]", "", t)
         if any(ch.isdigit() for ch in cleaned) and len(cleaned) >= 3:
             candidates.append(cleaned.upper())
 
-    # Prefer the last candidate (often the bus number at end)
     if candidates:
         return candidates[-1]
 
     return None
+
+
+# ----------------------------------------------------
+# VALID ROUTE: Bot/AI status check
+# ----------------------------------------------------
+@bot.route("/chatbot-status")
+def bot_status():
+    if not TRANSFORMERS_AVAILABLE:
+        return jsonify({"bot": "skipped", "status": "AI libraries not installed in container"})
+    return jsonify({"bot": "active", "status": "AI loaded"})
 
 
 # ----------------------------------------------------
@@ -93,10 +103,7 @@ def get_bus_location(bus_number: str):
     if not loc:
         return None, "Location for this bus is currently unavailable."
 
-    return {
-        "latitude": loc.latitude,
-        "longitude": loc.longitude
-    }, None
+    return {"latitude": loc.latitude, "longitude": loc.longitude}, None
 
 
 # ----------------------------------------------------
@@ -118,10 +125,8 @@ def get_bus_schedule(bus_number: str):
         return None, "No schedule found for this bus today."
 
     schedule_list = []
-
     for sch in schedules:
         stop = Stop.query.filter_by(stop_id=sch.stop_id).first()
-
         schedule_list.append({
             "stop": stop.name if stop else "Unknown stop",
             "arrival": sch.arrival_time.strftime("%H:%M"),
@@ -140,15 +145,12 @@ def chat():
     raw_message = data.get("message", "").strip()
     message = raw_message.lower()
 
-    # Authenticate User
+    # Authenticate user
     user_data = get_user_from_token(request)
     if not user_data:
         return jsonify({"reply": "Unauthorized or invalid token."}), 401
 
-    # =====================================================
-    # 1. BUS LOCATION INTENT
-    # e.g. "where is bus KA-01-AB-1234"
-    # =====================================================
+    # 1. Bus location intent
     if (("where is" in message) or ("location" in message)) and "bus" in message:
         bus_number = extract_bus_number(raw_message)
         if not bus_number:
@@ -165,12 +167,7 @@ def chat():
                 f"Longitude: {location['longitude']}"
         })
 
-    # =====================================================
-    # 2. BUS SCHEDULE INTENT
-    # Handles: "schedules of bus number KA-01-AB-1234 ?"
-    #          "bus schedule for KA-01-AB-1234"
-    #          "schedule for bus KA-01-AB-1234"
-    # =====================================================
+    # 2. Bus schedule intent
     if "schedule" in message and "bus" in message:
         bus_number = extract_bus_number(raw_message)
         if not bus_number:
@@ -186,29 +183,22 @@ def chat():
 
         return jsonify({"reply": reply})
 
-    # =====================================================
-    # 3. NORMAL AI CHAT (LLAMA 3.2 1B) – fallback
-    # =====================================================
-
-    db_info = f"User: {user_data.fullname}, Email: {user_data.email}"
-
-    prompt = f"""
+    # 3. AI Chat fallback only if installed and model loaded
+    if TRANSFORMERS_AVAILABLE and chat_pipe:
+        prompt = f"""
 <|system|>
-You are a smart transport assistant. 
-If the user asks about bus schedules or locations, you should answer using the bus database.
-If the information is not available in the database, say so clearly instead of making things up.
-Otherwise, chat with the user normally.
-
-Database Info:
-{db_info}
-
+You are a smart transport assistant.
 <|user|>
 {raw_message}
-
 <|assistant|>
 """
+        try:
+            raw = chat_pipe(prompt)[0]["generated_text"]
+            bot_reply = raw.split("<|assistant|>")[-1].strip()
+            return jsonify({"reply": bot_reply})
+        except Exception as e:
+            print("AI pipeline failed:", e)
+            return jsonify({"reply": "AI model error, but backend is running ✅"})
 
-    raw = chat_pipe(prompt)[0]["generated_text"]
-    bot_reply = raw.split("<|assistant|>")[-1].strip()
-
-    return jsonify({"reply": bot_reply})
+    # 4. Default text if AI is skipped
+    return jsonify({"reply": "✅ Backend deployed on Railway. Chatbot AI was skipped to reduce build size."})

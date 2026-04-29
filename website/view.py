@@ -1,5 +1,6 @@
-import dbm.sqlite3
+
 import os
+import math
 from functools import wraps
 import random
 import openrouteservice
@@ -17,34 +18,52 @@ from datetime import datetime, timedelta
 
 view = Blueprint('view',__name__)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf", "docx"}
-ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
-client = openrouteservice.Client(key=ORS_API_KEY)
+ORS_API_KEY = os.getenv("ORS_API_KEY") or "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
+
+
+def _get_ors_client():
+    key = (
+        (current_app.config.get("ORS_API_KEY") if current_app else None)
+        or os.getenv("ORS_API_KEY")
+        or ORS_API_KEY
+    )
+    # openrouteservice.Client will raise if key is None/empty.
+    if not key:
+        return None
+    return openrouteservice.Client(key=key)
+
+
+def _haversine_meters(lat1, lng1, lat2, lng2):
+    r = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @view.route('/user_details', methods=['GET'])
 @token_required
 def users_detail():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
+   
+    try:
+        results = (
+            db.session.query(User, Role.role_name)
+            .outerjoin(UserRole, User.id == UserRole.user_id)
+            .outerjoin(Role, UserRole.role_id == Role.role_id)
+            .all()
+        )
 
-    users = User.query.all()
-    if users:
         users_list = []
-        for user in users:
-            # Get the user's role
-            role_entry = UserRole.query.filter_by(user_id=user.id).first()
-            role = None
-            if role_entry:
-                role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
-                role = role_obj.role_name if role_obj else None
-
+        for user, role_name in results:
             # ✅ Skip users with role Driver
-            if role == "Driver":
+            # Using case-insensitive check safely
+            if role_name and role_name.strip().lower() == "driver":
                 continue
 
-            # ✅ Only append if not Driver
             users_list.append({
                 "user_uuid": user.user_id,
                 "fullname": user.fullname,
@@ -52,20 +71,20 @@ def users_detail():
                 "fathername": getattr(user, "father_name", ""),
                 "mothername": getattr(user, "mother_name", ""),
                 "phone_no": user.phone_no,
-                "role": role
+                "role": role_name
             })
+        
         return jsonify(users_list)
-
-    return jsonify([])
+    except Exception as e:
+         print(f"Error fetching user details: {e}")
+         return jsonify({"error": "Failed to fetch user details"}), 500
 
 
 @view.route('/profile', methods=['GET', 'PUT'])
 @token_required
 def profile():
     auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'Authorization header missing'}), 401
-
+    # already validated
     try:
         token = auth_header.split(" ")[1]  # Bearer <token>
         user_id = decode_token(token)
@@ -86,9 +105,9 @@ def profile():
             return jsonify({
                 'fullname': user.fullname,
                 'email': user.email,
-                # 'dob': user.dob,
-                # 'fathername': user.father_name,
-                # 'mothername': user.mother_name,
+                # 'dob': getattr(user, 'dob', None),
+                'fathername': getattr(user, 'father_name', ""),
+                'mothername': getattr(user, 'mother_name', ""),
                 'role': role,
                 'phone_no': user.phone_no
             }), 200
@@ -97,18 +116,20 @@ def profile():
             data = request.get_json()
             user.fullname = data.get('fullname', user.fullname)
             user.email = data.get('email', user.email)
-            user.dob = data.get('dob', user.dob)
-            user.father_name = data.get('fathername', user.father_name)
-            user.mother_name = data.get('mothername', user.mother_name)
+            # user.dob = data.get('dob', user.dob)
+            if hasattr(user, 'father_name'):
+                user.father_name = data.get('fathername', user.father_name)
+            if hasattr(user, 'mother_name'):
+                user.mother_name = data.get('mothername', user.mother_name)
 
             db.session.commit()
 
             return jsonify({
                 'fullname': user.fullname,
                 'email': user.email,
-                'dob': user.dob,
-                'fathername': user.father_name,
-                'mothername': user.mother_name,
+                # 'dob': user.dob,
+                'fathername': getattr(user, 'father_name', ""),
+                'mothername': getattr(user, 'mother_name', ""),
                 'phone_no': user.phone_no
             }), 200
 
@@ -125,6 +146,26 @@ def delete_user():
     user_uuid = data.get('user_uuid')
     if not user_uuid:
         return jsonify({"error": "Please provide User UUID"}), 400
+
+    # Permission Check
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(" ")[1]
+    requester_id = decode_token(token)
+    
+    # Check if requester is Admin
+    requester = User.query.filter_by(user_id=requester_id).first()
+    if not requester:
+         return jsonify({"error": "Requester not found"}), 403
+
+    requester_role_entry = UserRole.query.filter_by(user_id=requester.id).first()
+    is_admin = False
+    if requester_role_entry:
+        role_obj = Role.query.filter_by(role_id=requester_role_entry.role_id).first()
+        if role_obj and role_obj.role_name == "Admin": # Ensure "Admin" is correct case
+            is_admin = True
+    
+    if not is_admin:
+        return jsonify({"error": "Unauthorized: Admins only"}), 403
 
     user = User.query.filter_by(user_id=user_uuid).first()
     if not user:
@@ -143,6 +184,25 @@ def edit_user():
     print(user_uuid)
     if not user_uuid:
         return jsonify({"error": "Please provide User UUID"}), 400
+    
+    # Permission Check
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(" ")[1]
+    requester_id = decode_token(token)
+    
+    # Allow if editing self OR is Admin
+    if requester_id != user_uuid:
+        requester = User.query.filter_by(user_id=requester_id).first()
+        is_admin = False
+        if requester:
+            requester_role_entry = UserRole.query.filter_by(user_id=requester.id).first()
+            if requester_role_entry:
+                role_obj = Role.query.filter_by(role_id=requester_role_entry.role_id).first()
+                if role_obj and role_obj.role_name == "Admin":
+                    is_admin = True
+        
+        if not is_admin:
+             return jsonify({"error": "Unauthorized"}), 403
 
     user = User.query.filter_by(user_id=user_uuid).first()
     if not user:
@@ -150,40 +210,49 @@ def edit_user():
 
     user.fullname = data.get('fullname', user.fullname)
     user.email = data.get('email', user.email)
-    user.dob = data.get('dob', user.dob)
-    user.father_Name = data.get('fathername', user.father_Name)
-    user.mother_name = data.get('mothername', user.mother_name)
+    # user.dob = data.get('dob', user.dob)
+    # user.father_Name = data.get('fathername', user.father_Name) 
+    # user.mother_name = data.get('mothername', user.mother_name)
 
     db.session.commit()
     return jsonify({
         'fullname': user.fullname,
         'email': user.email,
-        'dob': user.dob,
-        'fathername': user.father_Name,
-        'mothername': user.mother_name
+        # 'dob': user.dob,
+        # 'fathername': user.father_Name,
+        # 'mothername': user.mother_name
     }), 200
 
 @view.route('/driver_details', methods=['GET'])
 @token_required
 def driver_detail():
     auth_header = request.headers.get('Authorization')
+    # already validated by token_required, but logic safe
     if not auth_header:
+        # Shouldn't happen due to decorator
         return jsonify({'error': 'Authorization header missing'}), 401
 
-    users = User.query.all()
-    if users:
-        users_list = []
-        for user in users:
-            # Get the user's role
-            role_entry = UserRole.query.filter_by(user_id=user.id).first()
-            role = None
-            if role_entry:
-                role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
-                role = role_obj.role_name if role_obj else None
+    try:
+        # Optimization: Fetch users JOINED with roles directly to avoid N+1 and filtering in python
+        # But keeping existing structure for now, just fixing logic
+        users = User.query.all()
+        if users:
+            users_list = []
+            for user in users:
+                # Get the user's role
+                role_entry = UserRole.query.filter_by(user_id=user.id).first()
+                role = None
+                if role_entry:
+                    role_obj = Role.query.filter_by(role_id=role_entry.role_id).first()
+                    role = role_obj.role_name if role_obj else None
 
-            # ✅ Skip users with role Driver
-            if role == "driver":
-            # ✅ Only append if not Driver
+                #Skip users with role Driver
+                # The original code skipped drivers. But this function is named 'driver_detail'.
+                # Logic Correction: If role is NOT driver, skip.
+                if not role or role.lower() != "driver":
+                    continue
+
+                # Only append if IS Driver
                 users_list.append({
                     "user_uuid": user.user_id,
                     "fullname": user.fullname,
@@ -194,6 +263,10 @@ def driver_detail():
                     "role": role
                 })
         return jsonify(users_list)
+
+    except Exception as e:
+        print("[ERROR] driver_details:", e)
+        return jsonify({"error": str(e)}), 500
 
     return jsonify([])
 @view.route('/upload/<string:user_id>', methods=['POST'])
@@ -284,10 +357,8 @@ def update_location():
 @view.route("/get_location/<int:bus_id>", methods=["GET"])
 @token_required
 def get_location(bus_id):
-    # auth_header = request.headers.get('Authorization')
-    # if not auth_header:
-    #     return jsonify({'error': 'Authorization header missing'}), 401
-
+    # auth_header check removed since @token_required handles it
+    
     loc = BusLocation.query.filter_by(bus_id=bus_id).first()
     if loc:
         return jsonify({
@@ -304,6 +375,10 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
     try:
         coords = [[start_lng, start_lat], [end_lng, end_lat]]
 
+        client = _get_ors_client()
+        if client is None:
+            raise RuntimeError("ORS_API_KEY not configured")
+
         # Request route from ORS
         route_data = client.directions(
             coordinates=coords,
@@ -316,7 +391,7 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
         geom_str = route_data['routes'][0]['geometry']  # This is a string
         decoded = convert.decode_polyline(geom_str)
 
-        # Replace geometry with dict
+        # Replace geometry with dict (GeoJSON-style). Coordinates remain [lng, lat].
         route_data['routes'][0]['geometry'] = {
             "type": "LineString",
             "coordinates": decoded['coordinates']
@@ -325,7 +400,28 @@ def get_route(start_lat, start_lng, end_lat, end_lng):
         return jsonify(route_data)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        # Fallback so UI can still draw a line when ORS is blocked/down.
+        # Keep shape consistent with ORS `format='json'` response.
+        try:
+            distance_m = _haversine_meters(start_lat, start_lng, end_lat, end_lng)
+            # Assume 30 km/h average speed for a rough ETA.
+            duration_s = int(distance_m / (30_000 / 3600)) if distance_m > 0 else 0
+        except Exception:
+            duration_s = 0
+
+        fallback = {
+            "routes": [
+                {
+                    "summary": {"duration": duration_s, "distance": 0},
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[start_lng, start_lat], [end_lng, end_lat]],
+                    },
+                }
+            ],
+            "warning": f"route_fallback_used: {str(e)}",
+        }
+        return jsonify(fallback), 200
 
 
 @view.route('/submit_feedback',methods=["POST"])
@@ -360,3 +456,123 @@ def submit_feedback():
 
     return jsonify({"Feedback":feedback
     , "User":current_user_id,"email":current_user_email})
+
+@view.route('/chat_users', methods=['GET'])
+@token_required
+def chat_users():
+    """Fetch all users except the current requesting user for the chat list."""
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        requester_id = decode_token(token)  # This is user_id (UUID string)
+
+        # Get current user's DB ID to exclude
+        current_user = User.query.filter_by(user_id=requester_id).first()
+        if not current_user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Fetch all users except current one
+        # Optimization: Select only needed fields
+        other_users = (
+            db.session.query(User)
+            .filter(User.id != current_user.id)
+            .all()
+        )
+
+        chat_list = []
+        for u in other_users:
+            # Compute unread count based on chat-type notifications
+            # sent to the current user mentioning this sender.
+            unread_count = (
+                db.session.query(Notification)
+                .filter(
+                    Notification.user_id == current_user.id,
+                    Notification.type == "chat",
+                    Notification.is_read == False,
+                    Notification.message.like(f"New message from {u.fullname}%")
+                )
+                .count()
+            )
+
+            chat_list.append({
+                "user_uuid": u.user_id,
+                "id": u.id,
+                "fullname": u.fullname,
+                "email": u.email,
+                "unread_messages": unread_count
+            })
+
+        return jsonify(chat_list), 200
+
+    except Exception as e:
+        print(f"[ERROR] chat_users: {e}")
+        return jsonify({"error": "Failed to fetch chat users"}), 500
+
+@view.route('/notifications', methods=['GET'])
+@token_required
+def get_notifications():
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        user_uuid = decode_token(token)
+        
+        user = User.query.filter_by(user_id=user_uuid).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        notifications = Notification.query.filter_by(user_id=user.id).order_by(Notification.timestamp.desc()).all()
+        
+        return jsonify([{
+            "id": n.notification_id,
+            "message": n.message,
+            "type": n.type,
+            "timestamp": n.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_read": n.is_read
+        } for n in notifications]), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@view.route('/notifications/mark_read/<int:notif_id>', methods=['POST'])
+@token_required
+def mark_notification_read(notif_id):
+    try:
+        auth_header = request.headers.get('Authorization') 
+        # Token validation already done by decorator
+        
+        notif = Notification.query.get(notif_id)
+        if not notif:
+            return jsonify({"error": "Notification not found"}), 404
+            
+        notif.is_read = True
+        db.session.commit()
+        return jsonify({"message": "Marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@view.route('/notifications/mark_all_read', methods=['POST'])
+@token_required
+def mark_all_notifications_read():
+    try:
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(" ")[1]
+        user_uuid = decode_token(token)
+        
+        user = User.query.filter_by(user_id=user_uuid).first()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Update all unread notifications for this user
+        unread_notifications = Notification.query.filter_by(user_id=user.id, is_read=False).all()
+        
+        if not unread_notifications:
+             return jsonify({"message": "No unread notifications"}), 200
+
+        for notif in unread_notifications:
+            notif.is_read = True
+        
+        db.session.commit()
+        return jsonify({"message": "All notifications marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
