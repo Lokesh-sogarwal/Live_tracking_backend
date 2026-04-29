@@ -59,7 +59,7 @@ def handle_send_message(data):
         message = data.get("msg")
         
         if not sender_id or not receiver_id or not message:
-            return
+            return {"ok": False, "error": "Missing sender_id/receiver_id/msg"}
 
         room = get_room_id(sender_id, receiver_id)
 
@@ -118,16 +118,21 @@ def handle_send_message(data):
                 print(f"Chat Notification Error: {e}")
                 # Don't rollback main session as message is already sent/committed
 
+            return {"ok": True, "timestamp": msg.timestamp.isoformat() if msg.timestamp else None}
+
         except IntegrityError:
             db.session.rollback()
             print("Error: Message sender or receiver does not exist.")
             emit("error", {"msg": "Invalid user ID"}, room=room)
+            return {"ok": False, "error": "Invalid user ID"}
         except Exception as db_e:
             db.session.rollback()
             print(f"DB Error: {db_e}")
+            return {"ok": False, "error": "Database error"}
 
     except Exception as e:
         print(f"Error in handle_send_message: {e}")
+        return {"ok": False, "error": "Server error"}
 
 
 @socketio.on("leave")
