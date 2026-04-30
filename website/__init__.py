@@ -2,7 +2,6 @@ from flask import Flask
 from flask_cors import CORS
 import os
 import pymysql
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,18 +30,10 @@ def create_app():
     # ===========================
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", '--Hackathon@inovatrix@-@2580#1234--')
 
-    # Determine DB URL: prefer LOCAL_DATABASE_URL (Aiven MySQL), then DATABASE_URL.
+    # Determine DB URL: prefer LOCAL_DATABASE_URL (Aiven MySQL), then DATABASE_URL, then fallback.
     db_url = os.getenv("LOCAL_DATABASE_URL") or os.getenv("DATABASE_URL")
-
-    # If no DB URL in environment, fail fast in production so deploy doesn't silently run without DB.
     if not db_url:
-        is_prod = os.getenv("FLASK_ENV", "").lower() == "production" or os.getenv("RENDER") is not None
-        if is_prod:
-            raise RuntimeError(
-                "No database URL found. Set LOCAL_DATABASE_URL or DATABASE_URL in environment before deploying."
-            )
-        # development fallback (safe default for local testing)
-        print("⚠ No DB URL found in env — falling back to local development DB.")
+        # Fallback to local DB for development
         db_url = f"mysql+pymysql://root:password@127.0.0.1:3306/{DB_NAME}"
 
     # Normalize mysql scheme to use PyMySQL dialect
@@ -60,13 +51,6 @@ def create_app():
                 continue
             parts.append(pair)
         db_url = base + ("?" + "&".join(parts) if parts else "")
-
-    # Mask credentials when logging
-    try:
-        masked = re.sub(r"//.*@", "//***@", db_url)
-    except Exception:
-        masked = db_url
-    print("Using SQLALCHEMY_DATABASE_URI:", masked)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")

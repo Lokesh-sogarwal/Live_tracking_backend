@@ -1,6 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
-
 from website import create_app
 from website.extension import socketio
 from flask_cors import CORS
@@ -11,7 +8,12 @@ from website.BusSchedular import init_scheduler
 from website.UpdateLocaionSchedular import init_location_scheduler
 
 app = create_app()
-CORS(app, supports_credentials=True, origins=["http://localhost:3000"])
+CORS(app, supports_credentials=True, origins=["https://your-frontend.vercel.app"])
+
+
+@app.route("/")
+def home():
+    return "Backend running successfully"
 
 if __name__ == "__main__":
     # Run schedulers ONLY ONCE (only when DB is available)

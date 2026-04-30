@@ -1,13 +1,11 @@
-"""WSGI entrypoint shim.
+"""WSGI entrypoint for hosts that run `gunicorn app:app`.
 
-Ensure `eventlet.monkey_patch()` runs before other imports so eventlet's
-green threads are properly initialized when Gunicorn loads this module.
-
-Render or other hosts sometimes expect `app:app`. This file
-exposes the `app` created in `main.py` so both `gunicorn app:app`
-and `gunicorn main:app` work.
+Ensure eventlet is monkey-patched before importing the application
+so eventlet green-threads are installed before any modules create
+threading primitives (prevents "RLock(s) were not greened" warning).
 """
 import eventlet
 eventlet.monkey_patch()
 
-from main import app  # re-export the Flask app
+from main import app  # re-export the Flask app for gunicorn
+
