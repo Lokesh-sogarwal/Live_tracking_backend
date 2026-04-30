@@ -1,10 +1,8 @@
 from flask_apscheduler import APScheduler
 from datetime import datetime, timedelta
-from math import radians, sin, cos, asin, sqrt
 from flask import current_app
 from website.database_utils import db
 from website.model import *
-from website.utils import notify_admins
 from sqlalchemy import and_
 
 scheduler = APScheduler()
@@ -60,61 +58,24 @@ def schedule_exists(route_id, bus_id, date_str, arrival_time, departure_time):
     return False
 
 
-def _estimate_trip_duration_minutes(route, avg_speed_kmph: float = 30.0) -> int:
-    """Estimate trip duration (minutes) using straight-line distance and average speed.
-
-    This is used to compute END time for the schedule.
-    """
-    try:
-        # Haversine formula between start and end
-        R = 6371.0  # Earth radius in km
-
-        lat1, lon1 = radians(route.start_lat), radians(route.start_lng)
-        lat2, lon2 = radians(route.end_lat), radians(route.end_lng)
-
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * asin(sqrt(a))
-        distance_km = R * c
-
-        if distance_km <= 0:
-            # Fallback minimum distance
-            distance_km = 5.0
-
-        hours = distance_km / max(avg_speed_kmph, 1.0)
-        minutes = int(hours * 60)
-
-        # Ensure a sensible minimum duration (e.g., 10 minutes)
-        return max(minutes, 10)
-    except Exception as e:
-        print("[WARN] Failed to estimate duration, using default 30 min:", e)
-        return 30
-
-
-# ---------- Route Schedule (arrival_time = start, departure_time = end) ----------
+# ---------- Route Schedule (auto stop_id fix) ----------
 def create_route_schedule(route, bus, driver, start_time, schedule_date_str, reverse=False):
     try:
-        # 🔹 arrival_time will store START time
-        start_dt = start_time
+        # define trip times
+        arrival_time = start_time + timedelta(minutes=30)  # assume 30 mins trip
+        departure_time = arrival_time + timedelta(minutes=5)
 
-        # 🔹 Compute END time based on distance & avg speed
-        trip_minutes = _estimate_trip_duration_minutes(route)
-        end_dt = start_dt + timedelta(minutes=trip_minutes)
-
-        # For duplicate check we pass start and end
-        if schedule_exists(route.route_id, bus.bus_id, schedule_date_str, start_dt, end_dt):
-            print(f"⚠️ Duplicate schedule detected for {bus.bus_number} at {start_dt}.")
-            return end_dt
+        if schedule_exists(route.route_id, bus.bus_id, schedule_date_str, arrival_time, departure_time):
+            print(f"⚠️ Duplicate schedule detected for {bus.bus_number} at {arrival_time}.")
+            return departure_time
 
         new_schedule = Schedule(
             route_id=route.route_id,
             bus_id=bus.bus_id,
             driver_id=driver.id,
-            arrival_time=start_dt,      # 👈 START TIME
-            departure_time=end_dt,      # 👈 END TIME (ETA)
-            status="yet to start",
+            arrival_time=arrival_time,
+            departure_time=departure_time,
+            status="on_time",
             current_index=0 if not reverse else 1,
             date=schedule_date_str,
             is_reached=0 if not reverse else 0
@@ -123,9 +84,9 @@ def create_route_schedule(route, bus, driver, start_time, schedule_date_str, rev
         db.session.add(new_schedule)
         db.session.commit()
 
-        print(f"✅ Inserted schedule | Bus {bus.bus_number} | Route {route.route_name} | {'reverse' if reverse else 'forward'} | start={start_dt}, end={end_dt}")
+        print(f"✅ Inserted schedule | Bus {bus.bus_number} | Route {route.route_name} | {'reverse' if reverse else 'forward'} | {arrival_time}")
 
-        return end_dt
+        return departure_time
 
     except Exception as e:
         db.session.rollback()
@@ -206,9 +167,6 @@ def create_daily_schedules(days=1):
                             print("⏩ Reverse trip skipped (bus not reached).")
 
             print(f"\n🎉 All schedules created for next {days} day(s).")
-            
-            # 🔔 Notify Admin
-            notify_admins(f"Daily Schedules Generated for {schedule_date_str}", type="info")
 
     except Exception as e:
         db.session.rollback()
@@ -230,16 +188,11 @@ def init_scheduler(app):
             id='daily_schedule_job',
             func=lambda: schedule_with_context(app),
             trigger='cron',
-<<<<<<< HEAD
-            hour=00,
-            minute=21
-=======
             hour=3,
             minute=40,
             timezone=LOCAL_TZ,
             misfire_grace_time=300,
             coalesce=False
->>>>>>> dc5dc98 (Make it render ready)
         )
 
     scheduler.init_app(app)
@@ -250,4 +203,4 @@ def init_scheduler(app):
 def schedule_with_context(app):
     with app.app_context():
         print("[DEBUG] Running scheduled job...")
-        create_daily_schedules(days=3)
+        create_daily_schedules(days=1)
