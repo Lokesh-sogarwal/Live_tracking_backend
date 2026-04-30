@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from website import create_app
 from website.extension import socketio
 from flask_cors import CORS
