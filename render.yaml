@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: live-tracking-backend
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k eventlet -w 1 main:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: LOCAL_DATABASE_URL
+        value: ""
+      - key: DATABASE_URL
+        value: ""
+      - key: SECRET_KEY
+        value: ""
+      - key: JWT_SECRET_KEY
+        value: ""
+      - key: START_SCHEDULERS
+        value: "1"
+      - key: PORT
+        value: ""
+      - key: BILLING_GATEWAY
+        value: "dummy"
+      - key: RAZORPAY_KEY_ID
+        value: ""
+      - key: RAZORPAY_KEY_SECRET
+        value: ""
+    # NOTE: Fill the above env var values in the Render dashboard instead of committing secrets here.
