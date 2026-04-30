@@ -65,9 +65,17 @@ def create_app():
     # ===========================
     # Initialize Extensions
     # ===========================
+    # Configure SQLAlchemy engine options for remote MySQL (Aiven) with SSL
+    # This will be passed to the underlying SQLAlchemy engine via Flask-SQLAlchemy.
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"ssl": {"ssl": {}}}
+    }
+
     db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*")   # ★ IMPORTANT FIX ★
-    CORS(app, supports_credentials=True)
+    # Allow only the frontend domain (override via FRONTEND_URL env if needed)
+    frontend_origin = os.getenv("FRONTEND_URL", "https://your-frontend.vercel.app")
+    socketio.init_app(app, cors_allowed_origins=[frontend_origin])
+    CORS(app, supports_credentials=True, origins=[frontend_origin])
 
     # ===========================
     # Register Blueprints
