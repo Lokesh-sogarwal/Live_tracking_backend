@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from flask import Blueprint, request, jsonify, current_app
 import os, re
 import jwt
@@ -202,3 +203,15 @@ You are a smart transport assistant.
 
     # 4. Default text if AI is skipped
     return jsonify({"reply": "✅ Backend deployed on Railway. Chatbot AI was skipped to reduce build size."})
+=======
+"""
+Chatbot removed — placeholder module.
+
+This project no longer includes the chatbot feature. The original
+`website/chatbot.py` logic (LLM + endpoints) was removed to simplify
+the deployment and eliminate the `transformers`/`torch` runtime
+dependencies.
+
+No blueprint is exposed by this module anymore.
+"""
+>>>>>>> dc5dc98 (Make it render ready)
