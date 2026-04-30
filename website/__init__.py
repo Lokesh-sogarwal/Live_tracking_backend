@@ -1,17 +1,38 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+<<<<<<< HEAD
 from config import Config
+=======
+import os
+import pymysql
+from dotenv import load_dotenv
+
+load_dotenv()
+
+>>>>>>> dc5dc98 (Make it render ready)
 from website.database_utils import db
 from website.extension import socketio
 import pymysql
 import os
 
+<<<<<<< HEAD
+=======
+# Import Blueprints
+from website.auth import auth
+from website.view import view
+from website.BusRoute import bus
+from website.get_data import get_data
+from website.chat import chat
+
+# Use pymysql as MySQLdb
+>>>>>>> dc5dc98 (Make it render ready)
 pymysql.install_as_MySQLdb()
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+<<<<<<< HEAD
     # ========== DATABASE SETUP ==========
     try:
         if not app.config.get("SQLALCHEMY_DATABASE_URI"):
@@ -23,6 +44,39 @@ def create_app():
                 # Without this, new models (e.g., RolePermission) may not be created.
                 import website.model  # noqa: F401
                 db.create_all()
+=======
+    # ===========================
+    # APP CONFIG
+    # ===========================
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", '--Hackathon@inovatrix@-@2580#1234--')
+
+    # Determine DB URL: prefer LOCAL_DATABASE_URL (Aiven MySQL), then DATABASE_URL, then fallback.
+    db_url = os.getenv("LOCAL_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not db_url:
+        # Fallback to local DB for development
+        db_url = f"mysql+pymysql://root:password@127.0.0.1:3306/{DB_NAME}"
+
+    # Normalize mysql scheme to use PyMySQL dialect
+    if db_url.startswith("mysql://"):
+        db_url = db_url.replace("mysql://", "mysql+pymysql://", 1)
+
+    # Remove any ssl-related query params (e.g. ssl-mode, ssl_mode, sslmode)
+    if "?" in db_url:
+        base, q = db_url.split("?", 1)
+        parts = []
+        for pair in q.split("&"):
+            k = pair.split("=", 1)[0].lower()
+            if k.startswith("ssl") or k.startswith("ssl-") or k == "sslmode":
+                # drop ssl-related param
+                continue
+            parts.append(pair)
+        db_url = base + ("?" + "&".join(parts) if parts else "")
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+    app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+    app.config["SESSION_COOKIE_SECURE"] = _ = (os.getenv("SESSION_COOKIE_SECURE", "False").lower() in ("1","true","yes"))
+    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))
+>>>>>>> dc5dc98 (Make it render ready)
 
                 # Seed common roles if the roles table is empty.
                 from website.model import Role
@@ -98,5 +152,18 @@ def create_app():
                 seed_billing_catalog()
         except Exception as e:
             print("⚠ Billing seed skipped:", e)
+
+    # Optionally start schedulers (set START_SCHEDULERS=0 to disable)
+    if os.getenv("START_SCHEDULERS", "1") == "1":
+        try:
+            from website.BusSchedular import init_scheduler
+            from website.UpdateLocaionSchedular import init_location_scheduler
+
+            # Start schedulers in the app context
+            init_scheduler(app)
+            init_location_scheduler(app)
+            print("🚀 Schedulers auto-started by create_app()")
+        except Exception as e:
+            print("⚠ Could not auto-start schedulers:", e)
 
     return app

@@ -9,6 +9,9 @@ from sqlalchemy import and_
 
 scheduler = APScheduler()
 
+# Use local timezone for all scheduler operations (aware datetimes)
+LOCAL_TZ = datetime.now().astimezone().tzinfo
+
 # 🔧 Config
 REVERSE_GAP_HOURS = 4  # gap between forward and reverse trip
 
@@ -153,7 +156,8 @@ def create_daily_schedules(days=1):
             assignments = list(zip(buses, drivers))
 
             for day_offset in range(days):
-                schedule_date = datetime.now() + timedelta(days=day_offset)
+                # make schedule_date timezone-aware
+                schedule_date = datetime.now(tz=LOCAL_TZ) + timedelta(days=day_offset)
                 schedule_date_str = schedule_date.strftime("%Y-%m-%d")
 
                 print(f"\n📅 Generating schedules for {schedule_date_str}")
@@ -164,7 +168,7 @@ def create_daily_schedules(days=1):
                         break
                     bus, driver = assignments[i]
 
-                    # ✅ start at 7:00 AM and space every 30 minutes
+                    # ✅ start at 7:00 AM and space every 30 minutes (timezone-aware)
                     start_time = schedule_date.replace(hour=7, minute=0, second=0, microsecond=0) + timedelta(minutes=i * 30)
 
                     driver_name = getattr(driver, 'fullname', getattr(driver, 'username', driver.email))
@@ -215,13 +219,27 @@ def create_daily_schedules(days=1):
 def init_scheduler(app):
     app.config['SCHEDULER_API_ENABLED'] = True
 
+    # Ensure scheduler uses local timezone and safe defaults
+    try:
+        app.config['SCHEDULER_TIMEZONE'] = LOCAL_TZ
+    except Exception:
+        app.config['SCHEDULER_TIMEZONE'] = str(LOCAL_TZ)
+
     if not scheduler.get_job('daily_schedule_job'):
         scheduler.add_job(
             id='daily_schedule_job',
             func=lambda: schedule_with_context(app),
             trigger='cron',
+<<<<<<< HEAD
             hour=00,
             minute=21
+=======
+            hour=3,
+            minute=40,
+            timezone=LOCAL_TZ,
+            misfire_grace_time=300,
+            coalesce=False
+>>>>>>> dc5dc98 (Make it render ready)
         )
 
     scheduler.init_app(app)

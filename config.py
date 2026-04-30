@@ -128,5 +128,11 @@ class Config:
     if not SQLALCHEMY_DATABASE_URI:
         print("❌ ERROR: No valid SQLALCHEMY_DATABASE_URI found! Set LOCAL_DATABASE_URL or POSTGRES_URL.")
 
+<<<<<<< HEAD
+=======
+    # Database: prefer `LOCAL_DATABASE_URL` (Aiven MySQL) to ensure the app
+    # always uses the Aiven MySQL instance in this deployment.
+    SQLALCHEMY_DATABASE_URI = os.getenv("LOCAL_DATABASE_URL") or os.getenv("DATABASE_URL")
+>>>>>>> dc5dc98 (Make it render ready)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")

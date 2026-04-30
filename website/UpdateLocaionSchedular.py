@@ -1,6 +1,7 @@
 from flask import Blueprint, current_app, jsonify
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import timezone
 import requests
 import os
 import time
@@ -9,7 +10,15 @@ from website.database_utils import db
 from website.utils import notify_admins
 
 bus_sim = Blueprint("bus_sim", __name__)
+<<<<<<< HEAD
 scheduler = BackgroundScheduler()
+=======
+LOCAL_TZ = datetime.now().astimezone().tzinfo
+
+# Use a scheduler configured with local timezone
+scheduler = BackgroundScheduler(timezone=LOCAL_TZ)
+scheduler.start()
+>>>>>>> dc5dc98 (Make it render ready)
 
 ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YTdlOGMyODhmYjQwMDRhYzNlNjRhYWJmODJmN2UyIiwiaCI6Im11cm11cjY0In0="
 
@@ -271,8 +280,14 @@ def move_bus(schedule_id, app):
 
         idx = schedule.current_index or 0
 
+        # mark running when first step executed
+        if idx == 0 and schedule.status not in ("running", "arrived"):
+            schedule.status = "running"
+            db.session.commit()
+
         if idx >= len(coords):
             schedule.is_reached = True
+<<<<<<< HEAD
             schedule.status = "completed"
             
              # 🔔 Notification (Already Complete)
@@ -282,6 +297,9 @@ def move_bus(schedule_id, app):
             except Exception as e:
                  print(f"Notif Error: {e}")
 
+=======
+            schedule.status = "arrived"
+>>>>>>> dc5dc98 (Make it render ready)
             db.session.commit()
             print(f"✅ Bus {bus_id} reached destination.")
             return
@@ -299,6 +317,7 @@ def move_bus(schedule_id, app):
         schedule.current_index = idx + 1
         if schedule.current_index >= len(coords):
             schedule.is_reached = True
+<<<<<<< HEAD
             schedule.status = "completed"
             # 🔔 Notification (Just Reached)
             try:
@@ -307,6 +326,9 @@ def move_bus(schedule_id, app):
                 notify_admins(f"Trip Completed: Bus {schedule.bus_id} reached destination.", type="success")
             except Exception as e:
                 print(f"Notif Error: {e}")
+=======
+            schedule.status = "arrived"
+>>>>>>> dc5dc98 (Make it render ready)
 
         db.session.commit()
         # print(f"[{datetime.now().strftime('%H:%M:%S')}] Bus {bus_id} moved to {lat},{lon} (Index {schedule.current_index})")
@@ -322,6 +344,8 @@ def schedule_todays_buses(app):
         for sched in schedules:
             sched.current_index = 0
             sched.is_reached = False
+            # Reset status for today's run
+            sched.status = "scheduled"
             db.session.commit()
 
             # Ensure BusLocation exists at start
@@ -340,11 +364,19 @@ def schedule_todays_buses(app):
             # ✅ Pick start time: arrival_time (Start of Trip)
             start_time = sched.arrival_time or sched.departure_time
             if isinstance(start_time, str):
+<<<<<<< HEAD
                 # If it's just a time string (HH:MM:SS), append correct date
                 if len(start_time) < 10: 
                      start_time = datetime.strptime(f"{today_str} {start_time}", "%Y-%m-%d %H:%M:%S")
                 else:
                      start_time = datetime.strptime(str(start_time), "%Y-%m-%d %H:%M:%S")
+=======
+                # parsed as naive; attach local tz
+                start_time = datetime.strptime(f"{today_str} {start_time}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+            elif isinstance(start_time, datetime) and start_time.tzinfo is None:
+                # make timezone-aware
+                start_time = start_time.replace(tzinfo=LOCAL_TZ)
+>>>>>>> dc5dc98 (Make it render ready)
 
             scheduler.add_job(
                 move_bus,
@@ -352,7 +384,11 @@ def schedule_todays_buses(app):
                 seconds=4,
                 args=[sched.schedule_id, app],
                 id=job_id,
-                next_run_time=start_time
+                start_date=start_time,
+                max_instances=1,
+                misfire_grace_time=60,
+                coalesce=False,
+                timezone=LOCAL_TZ
             )
             print(
                 f"🚌 Scheduled bus {sched.bus_id} (schedule {sched.schedule_id}) at {start_time} (Update every 4s)"
