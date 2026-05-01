@@ -72,10 +72,38 @@ def create_app():
     }
 
     db.init_app(app)
-    # Allow only the frontend domain (override via FRONTEND_URL env if needed)
-    frontend_origin = os.getenv("FRONTEND_URL", "https://your-frontend.vercel.app")
-    socketio.init_app(app, cors_allowed_origins=[frontend_origin])
-    CORS(app, supports_credentials=True, origins=[frontend_origin])
+
+    # Build CORS configuration. If FRONTEND_URL is provided, use it exactly.
+    # Otherwise, allow Vercel preview/deployment domains using a regex and
+    # permit localhost during local development when ALLOW_LOCAL is enabled.
+    frontend_origin = os.getenv("FRONTEND_URL")
+    allow_local = os.getenv("ALLOW_LOCAL", "true").lower() in ("1", "true", "yes")
+
+    if frontend_origin:
+        socketio_origins = [frontend_origin]
+        cors_origins = [frontend_origin]
+        if allow_local:
+            cors_origins.extend(["http://localhost:3000", "http://127.0.0.1:3000"])
+
+        # dedupe
+        cors_origins = list(dict.fromkeys(cors_origins))
+
+        socketio.init_app(app, cors_allowed_origins=socketio_origins)
+        CORS(app, supports_credentials=True, origins=cors_origins)
+    else:
+        # No explicit FRONTEND_URL set — accept Vercel preview domains via regex for HTTP
+        vercel_regex = r"^https://([a-z0-9-]+\.)?vercel\.app$"
+        resources = {r"/*": {"origins": vercel_regex}}
+        if allow_local:
+            # allow local dev as well
+            resources[r"/*"]["origins"] = [vercel_regex, "http://localhost:3000", "http://127.0.0.1:3000"]
+
+        # For Socket.IO, allow all origins when FRONTEND_URL is not specified (Socket.IO
+        # does not accept the same regex resource format). This is intentionally
+        # permissive so live Vercel deployments can connect; set FRONTEND_URL in Render
+        # for stricter control.
+        socketio.init_app(app, cors_allowed_origins="*")
+        CORS(app, supports_credentials=True, resources=resources)
 
     # ===========================
     # Register Blueprints
