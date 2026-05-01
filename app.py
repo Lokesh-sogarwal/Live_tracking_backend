@@ -1,11 +1,11 @@
 """WSGI entrypoint for hosts that run `gunicorn app:app`.
 
-Ensure eventlet is monkey-patched before importing the application
-so eventlet green-threads are installed before any modules create
-threading primitives (prevents "RLock(s) were not greened" warning).
+Do NOT monkey-patch here; monkey-patching the master/arbiter process
+can cause blocking calls inside Gunicorn's mainloop. Workers using the
+`eventlet` worker class will be greened by the worker process.
+
+This module simply re-exports the Flask `app` for Gunicorn to import.
 """
-import eventlet
-eventlet.monkey_patch()
 
 from main import app  # re-export the Flask app for gunicorn
 
