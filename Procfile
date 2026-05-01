@@ -1,1 +1,1 @@
-web: gunicorn -k eventlet -w 1 main:app
+web: gunicorn -c gunicorn_conf.py app:app
