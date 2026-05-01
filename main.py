@@ -8,7 +8,11 @@ from website.BusSchedular import init_scheduler
 from website.UpdateLocaionSchedular import init_location_scheduler
 
 app = create_app()
-CORS(app, supports_credentials=True, origins=["https://live-tracking-frontend.vercel.app/", "http://localhost:3000/"])
+# Allow both production frontend and local dev by default. Can be overridden with FRONTEND_URL env.
+frontend_origin = os.getenv("FRONTEND_URL", "https://live-tracking-frontend.vercel.app")
+local_origin = "http://localhost:3000"
+allowed = [frontend_origin, local_origin]
+CORS(app, supports_credentials=True, origins=allowed)
 
 
 @app.route("/")
