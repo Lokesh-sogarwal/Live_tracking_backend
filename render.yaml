@@ -6,7 +6,7 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -k eventlet -w 1 main:app
+    startCommand: gunicorn -c gunicorn_conf.py app:app
     healthCheckPath: /healthz
     envVars:
       - key: LOCAL_DATABASE_URL
@@ -21,6 +21,10 @@ services:
         value: "1"
       - key: PORT
         value: ""
+      - key: REDIS_URL
+        value: ""
+      - key: GUNICORN_WORKERS
+        value: "1"
       - key: BILLING_GATEWAY
         value: "dummy"
       - key: RAZORPAY_KEY_ID
