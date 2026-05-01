@@ -1,5 +1,7 @@
 from flask import Blueprint,request,jsonify,send_from_directory
 from website.model import *
+from website.extension import cache
+from website.database_utils import db
 from website.auth import token_required
 import  os
 
@@ -11,19 +13,35 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 @get_data.route('/get_data', methods=['GET'])
 @token_required
+@cache.cached(timeout=15, query_string=True)
 def fetch_data():
     try:
-        # 🧩 Fetch all users efficiently (only required columns)
-        users_query = db.session.query(User.id, User.fullname, User.email, User.date_created).all()
+        # 🧩 Fetch recent users (limit) and totals to avoid loading huge resultsets
+        per_user_limit = min(int(request.args.get('limit', 100)), 1000)
+        users_query = (
+            db.session.query(User.id, User.fullname, User.email, User.date_created)
+            .order_by(User.date_created.desc())
+            .limit(per_user_limit)
+            .all()
+        )
+
+        # Total users count (fast COUNT query)
+        total_users_count = db.session.query(db.func.count(User.id)).scalar()
         
-        # 🔥 Fetch active users efficiently
-        active_users_query = db.session.query(
-            Active_user.user_id, 
-            Active_user.login_time, 
-            Active_user.fullname, 
-            Active_user.email, 
-            Active_user.role
-        ).all()
+        # 🔥 Fetch recent active users (limit)
+        active_limit = min(int(request.args.get('active_limit', 50)), 500)
+        active_users_query = (
+            db.session.query(
+                Active_user.user_id,
+                Active_user.login_time,
+                Active_user.fullname,
+                Active_user.email,
+                Active_user.role
+            )
+            .order_by(Active_user.login_time.desc())
+            .limit(active_limit)
+            .all()
+        )
 
         # 🚌 Total drivers (Count directly in DB)
         total_drivers = (
@@ -57,7 +75,7 @@ def fetch_data():
         # ✅ Return structured JSON response
         return jsonify({
             "users": users_data,
-            "total_users": len(users_query),
+            "total_users": total_users_count,
             "total_active_users": len(active_users_query),
             "active_users": active_data,
             "total_driver": total_drivers,
@@ -73,18 +91,28 @@ def fetch_data():
 
 @get_data.route('/total_routes', methods=["GET"])
 @token_required
+@cache.cached(timeout=30, query_string=True)
 def total_routes():
     # auth header validated by token_required
 
     try:
-        # 📊 Counts
-        total_routes = Schedule.query.count()
-        completed_routes = Schedule.query.filter_by(is_reached=True).count()
+        # 📊 Counts (fast)
+        total_routes = db.session.query(db.func.count(Schedule.schedule_id)).scalar()
+        completed_routes = db.session.query(db.func.count(Schedule.schedule_id)).filter(Schedule.is_reached == True).scalar()
 
-        # 🧾 Fetch all schedules
-        schedules = Schedule.query.all()
+        # Pagination for schedules to avoid huge payloads
+        page = max(int(request.args.get('page', 1)), 1)
+        per_page = min(int(request.args.get('per_page', 200)), 2000)
+        schedules_query = (
+            Schedule.query
+            .order_by(Schedule.arrival_time.desc())
+            .limit(per_page)
+            .offset((page - 1) * per_page)
+        )
 
-        # 🧠 Convert SQLAlchemy objects to JSON-friendly dicts
+        schedules = schedules_query.all()
+
+        # Convert SQLAlchemy objects to JSON-friendly dicts
         schedules_data = [
             {
                 "schedule_id": sch.schedule_id,
@@ -118,6 +146,7 @@ def total_routes():
 
 @get_data.route('/get_documents', methods=["GET"])
 @token_required
+@cache.cached(timeout=60, query_string=True)
 def uploaded_documents():
     # auth header validated by token_required
 

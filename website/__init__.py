@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from website.database_utils import db
-from website.extension import socketio  # Socket.IO initialized here
+from website.extension import socketio, cache  # Socket.IO and Cache initialized here
 
 # Import Blueprints
 from website.auth import auth
@@ -71,6 +71,19 @@ def create_app():
         "connect_args": {"ssl": {"ssl": {}}}
     }
 
+    # ---------------------------
+    # Caching configuration
+    # ---------------------------
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        app.config["CACHE_TYPE"] = "RedisCache"
+        app.config["CACHE_REDIS_URL"] = redis_url
+    else:
+        app.config["CACHE_TYPE"] = os.getenv("CACHE_TYPE", "SimpleCache")
+        app.config["CACHE_DEFAULT_TIMEOUT"] = int(os.getenv("CACHE_DEFAULT_TIMEOUT", "30"))
+
+    cache.init_app(app)
+
     db.init_app(app)
 
     # Build CORS configuration. If FRONTEND_URL is provided, use it exactly.
@@ -88,7 +101,11 @@ def create_app():
         # dedupe
         cors_origins = list(dict.fromkeys(cors_origins))
 
-        socketio.init_app(app, cors_allowed_origins=socketio_origins)
+        # Pass message_queue when using Redis so Socket.IO can scale across workers
+        if redis_url:
+            socketio.init_app(app, cors_allowed_origins=socketio_origins, message_queue=redis_url)
+        else:
+            socketio.init_app(app, cors_allowed_origins=socketio_origins)
         CORS(app, supports_credentials=True, origins=cors_origins)
     else:
         # No explicit FRONTEND_URL set — accept Vercel preview domains via regex for HTTP
@@ -102,7 +119,10 @@ def create_app():
         # does not accept the same regex resource format). This is intentionally
         # permissive so live Vercel deployments can connect; set FRONTEND_URL in Render
         # for stricter control.
-        socketio.init_app(app, cors_allowed_origins="*")
+        if redis_url:
+            socketio.init_app(app, cors_allowed_origins="*", message_queue=redis_url)
+        else:
+            socketio.init_app(app, cors_allowed_origins="*")
         CORS(app, supports_credentials=True, resources=resources)
 
     # ===========================
