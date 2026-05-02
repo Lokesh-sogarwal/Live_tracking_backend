@@ -84,4 +84,6 @@ class SimpleFlaskCache:
 
 
 cache = SimpleFlaskCache()
-socketio = SocketIO(cors_allowed_origins="*", manage_session=True)
+# Explicitly set async_mode to 'eventlet' so server and client use the same async driver.
+# cors_allowed_origins set here to ensure Socket.IO accepts connections from the frontend.
+socketio = SocketIO(async_mode='eventlet', cors_allowed_origins="*", manage_session=True)
