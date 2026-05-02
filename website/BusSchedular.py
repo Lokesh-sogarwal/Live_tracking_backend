@@ -188,8 +188,8 @@ def init_scheduler(app):
             id='daily_schedule_job',
             func=lambda: schedule_with_context(app),
             trigger='cron',
-            hour=00,
-            minute=00,
+            hour=10,
+            minute=5,
             timezone=LOCAL_TZ,
             misfire_grace_time=300,
             coalesce=False
