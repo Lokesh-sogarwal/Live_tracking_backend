@@ -32,3 +32,22 @@ services:
       - key: RAZORPAY_KEY_SECRET
         value: ""
     # NOTE: Fill the above env var values in the Render dashboard instead of committing secrets here.
+
+  - type: worker
+    name: live-tracking-scheduler
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scheduler_worker.py
+    envVars:
+      - key: LOCAL_DATABASE_URL
+        value: ""
+      - key: DATABASE_URL
+        value: ""
+      - key: SECRET_KEY
+        value: ""
+      - key: START_SCHEDULERS
+        value: "1"
+    # NOTE: Scheduler worker should have DB envs set; keep secrets in Render dashboard.
