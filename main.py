@@ -25,6 +25,7 @@ if __name__ == "__main__":
         if app.config.get('DB_CONNECTED'):
             init_scheduler(app)
             init_location_scheduler(app)
+            print("Schedulers initialized ✅")
         else:
             print("⚠️ Skipping schedulers because DB is not connected.")
 
