@@ -34,7 +34,7 @@ describe('GET /view/get_location/:bus_id?schedule_id=', () => {
     const { bus, trip: s } = await trip({ startMs: -60 * 60_000, endMs: -40 * 60_000 }); // like #1: window passed
     const res = await get(bus.busId, s.scheduleId);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ bus_id: bus.busId, schedule_id: s.scheduleId, location: null, trip_status: 'on_time', trip_completed: false, trip_started: false });
+    expect(res.body).toEqual({ bus_id: bus.busId, schedule_id: s.scheduleId, location: null, trip_status: 'on_time', trip_completed: false, trip_started: false, lifecycle: 'did_not_depart' });
   });
 
   it('an unknown schedule id, or one belonging to another bus, is a permanent 404 TRIP_NOT_FOUND', async () => {

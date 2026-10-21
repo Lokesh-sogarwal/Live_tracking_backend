@@ -92,7 +92,7 @@ describe('Pari Chowk -> Saket: a trip that has not started never shows the bus a
     const forB = await position(bus.busId, b.scheduleId);
     // An existing trip with no position yet is an empty result, not a 404.
     expect(forB.status).toBe(200);
-    expect(forB.body).toEqual({ bus_id: bus.busId, schedule_id: b.scheduleId, location: null, trip_status: 'on_time', trip_completed: false, trip_started: false });
+    expect(forB.body).toEqual({ bus_id: bus.busId, schedule_id: b.scheduleId, location: null, trip_status: 'on_time', trip_completed: false, trip_started: false, lifecycle: 'upcoming' });
   });
 
   it('a new trip starts at the origin and advances toward the destination (no inherited coordinates)', async () => {

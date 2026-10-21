@@ -1,12 +1,12 @@
 import { Bus, Route, Schedule } from '../models/index.js';
 import { recordLocation } from '../services/locations.js';
 import { addDays, todayInTz } from '../utils/time.js';
+import { isEligibleToRun } from '../services/tripLifecycle.js';
 
 // Statuses an operator sets deliberately; the simulation must not replace them with "running".
 const KEEP_WHILE_RUNNING = ['delayed'];
 export const COMPLETED = 'arrived'; // existing completion status (on time or early)
 export const DELAYED_COMPLETED = 'delayed_completed'; // reached the destination after the scheduled arrival
-const CANCELLED = /cancel/i;
 
 // Legacy field naming: `arrivalTime` is when a trip STARTS and `departureTime` its scheduled END
 // (see utils/trips.js in the app).
@@ -35,7 +35,8 @@ export async function eligibleTrips(now, config) {
     .sort({ arrivalTime: 1 })
     .limit(500)
     .lean();
-  return candidates.filter((t) => !CANCELLED.test(t.status || '') && t.arrivalTime < t.departureTime);
+  // Same rule the API reports (services/tripLifecycle.js): not_started, running or delayed.
+  return candidates.filter((t) => isEligibleToRun(t, now));
 }
 
 export async function runSimulationTick({ now = new Date(), config, logger, geo }) {

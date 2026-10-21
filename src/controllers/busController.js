@@ -6,6 +6,7 @@ import { isValidLat, isValidLng } from '../services/geo.js';
 import { escapeRegex, parsePagination } from '../utils/pagination.js';
 import { addDays, formatHHMM, formatLegacy, isValidDateString, todayInTz, wallTimeToDate } from '../utils/time.js';
 import { badRequest, conflict, notFound, upstreamError } from '../utils/errors.js';
+import { lifecycleFields } from '../services/tripLifecycle.js';
 
 const place = z.string().trim().min(1).max(300);
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM');
@@ -126,6 +127,7 @@ export function createBusController(ctx) {
     },
 
     async searchRoutes(req, res) {
+      const now = new Date(); // one instant for every row's lifecycle
       // Legacy: keep only the first comma-separated part ("KR Puram, Bengaluru" -> "KR Puram")
       // and match it against either end of the route, case-insensitively.
       const first = (v) => (typeof v === 'string' ? v.split(',')[0].trim() : '');
@@ -163,6 +165,7 @@ export function createBusController(ctx) {
           is_reached: Boolean(s.isReached),
           // "reverse" trips run end_point -> start_point.
           direction: s.direction || 'forward',
+          ...lifecycleFields(s, now),
         });
         byRoute.set(String(s.route), list);
       }
@@ -194,6 +197,7 @@ export function createBusController(ctx) {
     },
 
     async listSchedules(req, res) {
+      const now = new Date(); // one instant for every row's lifecycle
       const q = req.validatedQuery;
       const includeDetails = ['1', 'true', 'yes'].includes((q.include_route_details || '').trim().toLowerCase());
       const { limit, skip } = parsePagination(q, { defaultLimit: 500, maxLimit: 2000 });
@@ -240,9 +244,9 @@ export function createBusController(ctx) {
             status: s.status,
             date: s.date,
             is_reached: Boolean(s.isReached),
-            // Whether the bus has actually departed (made progress), not just "start time passed".
-            started: (s.currentIndex || 0) > 0,
             direction: s.direction || 'forward',
+            // start_at / end_at / started / lifecycle — the one lifecycle every screen shows.
+            ...lifecycleFields(s, now),
             arrived_at: s.arrivedAt ? s.arrivedAt.toISOString() : null,
           };
           if (includeDetails) {

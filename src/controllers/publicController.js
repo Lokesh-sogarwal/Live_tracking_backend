@@ -2,6 +2,20 @@ import { z } from 'zod';
 import { Route, Schedule, Stop } from '../models/index.js';
 import { addDays, formatHHMM, isValidDateString, todayInTz } from '../utils/time.js';
 import { badRequest } from '../utils/errors.js';
+import { tripLifecycle } from '../services/tripLifecycle.js';
+
+// Public labels for the shared lifecycle (services/tripLifecycle.js).
+const PUBLIC_STATUS = {
+  upcoming: 'scheduled',
+  not_started: 'scheduled', // due, not departed yet
+  running: 'running',
+  delayed: 'delayed',
+  did_not_depart: 'missed',
+  completed: 'completed',
+  delayed_completed: 'completed_late',
+  cancelled: 'cancelled',
+  invalid: 'cancelled',
+};
 
 // Explicitly public data for logged-out visitors: route names, stops and the timetable.
 // Never drivers, user IDs, documents or anything administrative.
@@ -61,19 +75,7 @@ export function createPublicController(ctx) {
           // the dashboard's utils/trips.js both treat it so) and departureTime when it ends.
           start_time: formatHHMM(s.arrivalTime, tz),
           end_time: formatHHMM(s.departureTime, tz),
-          status: s.isReached
-            ? s.status === 'delayed_completed'
-              ? 'completed_late'
-              : 'completed'
-            : /cancel/i.test(s.status || '')
-              ? 'cancelled'
-              : /delay/i.test(s.status || '')
-                ? 'delayed'
-                : (s.currentIndex || 0) > 0
-                  ? 'running' // actually under way
-                  : s.departureTime <= now
-                    ? 'missed' // window passed without departing; it is not started late
-                    : 'scheduled',
+          status: PUBLIC_STATUS[tripLifecycle(s, now)],
         }))
         .filter((r) => !q || [r.route_name, r.start_point, r.end_point, r.bus_number].some((v) => (v || '').toLowerCase().includes(q)));
       res.json({ date, today, departures: rows });
