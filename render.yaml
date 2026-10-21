@@ -1,5 +1,8 @@
 # Render blueprint for the Node backend. Secrets are set in the Render dashboard
 # (sync: false), never committed. Deploy alongside the Flask service until cutover.
+# Free plan alternative (no background workers on free): ONE web service with start command
+# `node src/server.js` and RUN_WORKER=true (plus SIMULATION_ENABLED=true if you want simulated
+# buses). A free instance sleeps after ~15 min without traffic; jobs pause while it sleeps.
 # This file sits at the root of the backend repository (Live_tracking_backend), which *is*
 # the backend: no rootDir. (rootDir: backend-node pointed at a folder that doesn't exist there.)
 services:

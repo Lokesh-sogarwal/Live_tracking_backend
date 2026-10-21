@@ -278,7 +278,7 @@ export function createViewController(ctx) {
     },
 
     async getLocation(req, res) {
-      const loc = await BusLocation.findOne({ busId: req.params.bus_id }).populate('schedule', 'scheduleId isReached').lean();
+      const loc = await BusLocation.findOne({ busId: req.params.bus_id }).populate('schedule', 'scheduleId isReached status').lean();
       if (!loc) throw notFound('No location found');
       const body = serializeLocation(loc, config);
       const wanted = req.validatedQuery?.schedule_id;

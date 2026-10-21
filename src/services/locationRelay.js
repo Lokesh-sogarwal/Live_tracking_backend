@@ -42,7 +42,7 @@ export function startLocationRelay(io, { config, logger, intervalMs = 1000 }) {
         const rows = await BusLocation.find({ busId: { $in: busIds }, updatedAt: { $gte: cursor } })
           .sort({ updatedAt: 1 })
           .limit(1000)
-          .populate('schedule', 'scheduleId isReached')
+          .populate('schedule', 'scheduleId isReached status')
           .lean();
         for (const loc of rows) {
           if (loc.updatedAt > cursor) cursor = loc.updatedAt;

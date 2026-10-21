@@ -62,7 +62,9 @@ export function createPublicController(ctx) {
           start_time: formatHHMM(s.arrivalTime, tz),
           end_time: formatHHMM(s.departureTime, tz),
           status: s.isReached
-            ? 'completed'
+            ? s.status === 'delayed_completed'
+              ? 'completed_late'
+              : 'completed'
             : /cancel/i.test(s.status || '')
               ? 'cancelled'
               : /delay/i.test(s.status || '')

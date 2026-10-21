@@ -8,11 +8,12 @@ import { isValidLat, isValidLng } from './geo.js';
 //  - recordedAt older than LOCATION_STALE_SECONDS is rejected as stale;
 //  - recordedAt more than LOCATION_MAX_FUTURE_SKEW_SECONDS ahead of the server is rejected;
 //  - an update older than the stored one is rejected (out-of-order delivery).
-export async function recordLocation({ bus, lat, lng, recordedAt = new Date(), source, schedule = null }, config) {
+// `now` is the clock the freshness rules use (the simulation passes its own; default: wall time).
+export async function recordLocation({ bus, lat, lng, recordedAt = new Date(), source, schedule = null, now: clock }, config) {
   if (!isValidLat(lat) || !isValidLng(lng)) throw badRequest('latitude must be within [-90, 90] and longitude within [-180, 180]');
   if (lat === 0 && lng === 0) throw badRequest('Coordinates (0, 0) are not a valid bus position');
 
-  const now = Date.now();
+  const now = clock ? clock.getTime() : Date.now();
   const at = recordedAt instanceof Date ? recordedAt : new Date(recordedAt);
   if (Number.isNaN(at.getTime())) throw badRequest('Invalid timestamp');
   if (at.getTime() > now + config.LOCATION_MAX_FUTURE_SKEW_SECONDS * 1000) throw badRequest('Timestamp is in the future');
@@ -79,5 +80,7 @@ export function serializeLocation(loc, config) {
     schedule_id: loc.scheduleId ?? (loc.schedule && typeof loc.schedule === 'object' ? loc.schedule.scheduleId ?? null : null),
     // Whether that trip has finished (only when the trip was looked up, i.e. on REST reads).
     ...(loc.schedule && typeof loc.schedule === 'object' && 'isReached' in loc.schedule ? { trip_completed: Boolean(loc.schedule.isReached) } : {}),
+    // That trip's status (e.g. "delayed_completed"), when looked up.
+    ...(loc.schedule && typeof loc.schedule === 'object' && 'status' in loc.schedule ? { trip_status: loc.schedule.status } : {}),
   };
 }

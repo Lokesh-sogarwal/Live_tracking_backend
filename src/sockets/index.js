@@ -176,7 +176,7 @@ export function createSocketServer(httpServer, ctx) {
         if (typeof ack === 'function') ack({ ok: true });
         // Current position straight away, so a map can place the marker without waiting
         // for the next movement. The relay won't send this same position again.
-        const current = await BusLocation.findOne({ busId }).populate('schedule', 'scheduleId isReached').lean();
+        const current = await BusLocation.findOne({ busId }).populate('schedule', 'scheduleId isReached status').lean();
         if (current) {
           markEmitted(busId, current.recordedAt);
           socket.emit('bus:location', serializeLocation(current, config));

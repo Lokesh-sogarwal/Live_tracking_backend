@@ -9,6 +9,7 @@ import { createGeoService } from './services/geo.js';
 import { createStorage } from './services/storage.js';
 import { createApp } from './app.js';
 import { createSocketServer } from './sockets/index.js';
+import { startWorker } from './worker.js';
 
 export async function startServer(env = process.env) {
   const config = loadConfig(env);
@@ -30,6 +31,10 @@ export async function startServer(env = process.env) {
   await new Promise((resolve) => server.listen(config.PORT, resolve));
   logger.info({ port: server.address().port, env: config.NODE_ENV }, 'API listening');
 
+  // RUN_WORKER=true: run the scheduler/simulation in this process too (one service on hosts
+  // without background workers). The lease still allows only one active worker overall.
+  const worker = config.RUN_WORKER ? await startWorker({ config, logger, geo: ctx.geo }) : null;
+
   let closing = false;
   const shutdown = async (signal) => {
     if (closing) return;
@@ -37,6 +42,7 @@ export async function startServer(env = process.env) {
     logger.info({ signal }, 'Shutting down');
     const force = setTimeout(() => process.exit(1), 15_000);
     force.unref();
+    await worker?.stop();
     io.close();
     await new Promise((resolve) => server.close(resolve));
     await disconnectMongo();

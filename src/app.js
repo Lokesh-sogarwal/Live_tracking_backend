@@ -6,11 +6,22 @@ import { buildRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler, requestId } from './middleware/common.js';
 import { createRateLimiters } from './middleware/rateLimits.js';
 
+// Allowlist entries are exact origins or scoped patterns (see validateOriginPattern in
+// config/index.js): "*" matches [a-z0-9-]+ within one host label, never a dot.
+const escapeRe = (s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+export function originMatcher(allowlist) {
+  const exact = new Set(allowlist.filter((o) => !o.includes('*')));
+  const patterns = allowlist.filter((o) => o.includes('*') && o !== '*').map((o) => new RegExp(`^${escapeRe(o).replace('*', '[a-z0-9-]+')}$`, 'i'));
+  const any = allowlist.includes('*');
+  return (origin) => any || exact.has(origin) || patterns.some((re) => re.test(origin));
+}
+
 export function corsOriginCheck(allowlist) {
+  const allowed = originMatcher(allowlist);
   return (origin, cb) => {
     // Requests without an Origin header (curl, server-to-server, same-origin navigation).
     if (!origin) return cb(null, true);
-    return cb(null, allowlist.includes(origin.replace(/\/$/, '')));
+    return cb(null, allowed(origin.replace(/\/$/, '')));
   };
 }
 

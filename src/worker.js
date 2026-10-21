@@ -15,21 +15,19 @@ const LEASE_NAME = 'scheduler-worker';
 const LEASE_MS = 30_000;
 const SCHEDULE_CHECK_MS = 30_000;
 
-async function main() {
-  const config = loadConfig();
-  const logger = createLogger(config.LOG_LEVEL).child({ component: 'worker' });
-
+// Starts the job loops (scheduler, return trips, simulation) under the Mongo lease. Used by
+// `node src/worker.js` (own process) and by the API when RUN_WORKER=true (one process, e.g. a
+// single free Render web service). Returns { stop } — or null when SCHEDULER_ENABLED=false.
+// Expects MongoDB to be connected already.
+export async function startWorker({ config, logger: baseLogger, geo }) {
+  const logger = baseLogger.child({ component: 'worker' });
   if (!config.SCHEDULER_ENABLED) {
-    logger.warn('SCHEDULER_ENABLED is false; worker exiting');
-    return;
+    logger.warn('SCHEDULER_ENABLED is false; worker jobs not started');
+    return null;
   }
   if (config.SIMULATION_ENABLED && config.isProduction) {
     logger.warn('SIMULATION_ENABLED=true in production: simulated bus positions will be published as live locations');
   }
-
-  await connectMongo(config.MONGODB_URI, logger);
-  await ensureIndexes();
-  const geo = createGeoService(config, logger);
   const owner = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
   const instance = randomUUID().slice(0, 8);
   const startedAt = new Date();
@@ -87,14 +85,33 @@ async function main() {
     logger.warn('Location simulation disabled (set SIMULATION_ENABLED=true to enable)');
   }
 
-  const shutdown = async (signal) => {
+  // Stops the loops and hands the lease over at once (instead of after it expires).
+  const stop = async () => {
     if (stopping) return;
     stopping = true;
-    logger.info({ signal }, 'Worker shutting down');
     clearInterval(heartbeatTimer);
     loops.forEach((l) => l.stop());
+    await releaseLease(LEASE_NAME, owner).catch((err) => logger.warn({ err: { message: err.message } }, 'Lease release failed'));
+    logger.info('Worker jobs stopped');
+  };
+  return { stop };
+}
+
+// Standalone worker process: `npm run start:worker`.
+async function main() {
+  const config = loadConfig();
+  const logger = createLogger(config.LOG_LEVEL);
+  await connectMongo(config.MONGODB_URI, logger);
+  await ensureIndexes();
+  const worker = await startWorker({ config, logger, geo: createGeoService(config, logger) });
+  if (!worker) {
+    await disconnectMongo();
+    return;
+  }
+  const shutdown = async (signal) => {
+    logger.info({ signal }, 'Worker shutting down');
     try {
-      await releaseLease(LEASE_NAME, owner);
+      await worker.stop();
       await disconnectMongo();
     } finally {
       process.exit(0);
@@ -104,8 +121,10 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('Worker failed to start:', err.message);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('Worker failed to start:', err.message);
+    process.exit(1);
+  });
+}

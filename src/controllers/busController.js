@@ -241,6 +241,7 @@ export function createBusController(ctx) {
             date: s.date,
             is_reached: Boolean(s.isReached),
             direction: s.direction || 'forward',
+            arrived_at: s.arrivedAt ? s.arrivedAt.toISOString() : null,
           };
           if (includeDetails) {
             row.route_stops = stopsByRoute.get(String(s.route._id)) ?? [];

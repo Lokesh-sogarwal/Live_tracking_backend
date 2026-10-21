@@ -54,6 +54,9 @@ const schema = z.object({
   LOCATION_RELAY_MS: int(1000),
 
   // Worker
+  // Also run the worker jobs inside the API process (`node src/server.js`). For hosts without a
+  // background-worker service (e.g. a free Render web service). Off: run `npm run start:worker`.
+  RUN_WORKER: bool(false),
   SCHEDULER_ENABLED: bool(true),
   // Daily run time (APP_TIMEZONE, default Asia/Kolkata): midnight. Each run (re)fills the
   // window today .. today + SCHEDULE_DAYS_AHEAD.
@@ -127,6 +130,20 @@ const UNSAFE_ADMIN_PASSWORDS = new Set([
   'administrator',
 ]);
 
+// FRONTEND_ORIGINS entries are exact origins or *scoped* patterns for preview deployments, e.g.
+// https://live-tracking-frontend-*-lokesh-sogarwals-projects.vercel.app — "*" matches letters,
+// digits and dashes inside the first host label only (never a dot), and must be followed by
+// fixed text in that label (your team suffix), so it can't match someone else's site.
+const PATTERN_RULE = /^https:\/\/[a-z0-9-]*\*[a-z0-9-]*[a-z0-9]-?[a-z0-9-]*\.[a-z0-9.-]+$/i;
+export function validateOriginPattern(entry) {
+  if (!entry.includes('*')) return null;
+  if ((entry.match(/\*/g) || []).length !== 1) return 'only one "*" is allowed per origin pattern';
+  if (!PATTERN_RULE.test(entry)) return 'patterns must be https://<label-with-*>.<domain> with "*" in the first label';
+  const label = entry.slice('https://'.length).split('.')[0];
+  if (!/\*[a-z0-9-]*[a-z0-9]{3,}/i.test(label)) return 'a pattern needs fixed text after "*" in its first label (e.g. your Vercel team suffix)';
+  return null;
+}
+
 export function loadConfig(env = process.env) {
   const parsed = schema.safeParse(env);
   if (!parsed.success) {
@@ -157,6 +174,12 @@ export function loadConfig(env = process.env) {
     throw new Error('Invalid configuration: set both SMTP_USER and SMTP_PASS, or neither');
   }
 
+  for (const o of cfg.FRONTEND_ORIGINS.split(',').map((x) => x.trim()).filter(Boolean)) {
+    if (o === '*') continue; // handled below (refused in production)
+    const problem = validateOriginPattern(o);
+    if (problem) throw new Error(`Invalid configuration: FRONTEND_ORIGINS entry "${o}": ${problem}`);
+  }
+
   if (cfg.NODE_ENV === 'production') {
     if (cfg.JWT_SECRET.length < 32 || UNSAFE_SECRETS.has(cfg.JWT_SECRET.toLowerCase())) {
       throw new Error('Invalid configuration: JWT_SECRET must be a random value of at least 32 characters in production');
@@ -181,6 +204,7 @@ export function loadConfig(env = process.env) {
       .filter(Boolean),
     mailProvider: cfg.RESEND_API_KEY ? 'resend' : cfg.SMTP_HOST ? 'smtp' : null,
     mailEnabled: Boolean((cfg.RESEND_API_KEY || cfg.SMTP_HOST) && cfg.MAIL_FROM),
-    appPublicUrl: (cfg.APP_PUBLIC_URL || cfg.FRONTEND_ORIGINS.split(',')[0] || '').trim().replace(/\/$/, ''),
+    // Emailed links need a real address: never a pattern entry.
+    appPublicUrl: (cfg.APP_PUBLIC_URL || cfg.FRONTEND_ORIGINS.split(',').map((o) => o.trim()).find((o) => o && !o.includes('*')) || '').trim().replace(/\/$/, ''),
   };
 }

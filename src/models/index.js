@@ -181,8 +181,11 @@ const scheduleSchema = new Schema(
     stop: { type: ObjectId, ref: 'Stop', default: null },
     arrivalTime: { type: Date, required: true },
     departureTime: { type: Date, required: true },
+    // on_time (scheduled) | running | delayed (set by an operator) | cancelled |
+    // arrived (completed on time) | delayed_completed (reached the destination after departureTime)
     status: { type: String, default: 'on_time', maxlength: 50 },
     currentIndex: { type: Number, default: 0, min: 0 },
+    arrivedAt: { type: Date, default: null }, // when the destination was reached
     date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
     isReached: { type: Boolean, default: false },
     direction: { type: String, enum: ['forward', 'reverse'], default: 'forward' },
