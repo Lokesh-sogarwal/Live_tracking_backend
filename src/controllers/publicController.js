@@ -69,9 +69,11 @@ export function createPublicController(ctx) {
               ? 'cancelled'
               : /delay/i.test(s.status || '')
                 ? 'delayed'
-                : s.arrivalTime <= now
-                  ? 'running'
-                  : 'scheduled',
+                : (s.currentIndex || 0) > 0
+                  ? 'running' // actually under way
+                  : s.departureTime <= now
+                    ? 'missed' // window passed without departing; it is not started late
+                    : 'scheduled',
         }))
         .filter((r) => !q || [r.route_name, r.start_point, r.end_point, r.bus_number].some((v) => (v || '').toLowerCase().includes(q)));
       res.json({ date, today, departures: rows });

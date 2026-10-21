@@ -240,6 +240,8 @@ export function createBusController(ctx) {
             status: s.status,
             date: s.date,
             is_reached: Boolean(s.isReached),
+            // Whether the bus has actually departed (made progress), not just "start time passed".
+            started: (s.currentIndex || 0) > 0,
             direction: s.direction || 'forward',
             arrived_at: s.arrivedAt ? s.arrivedAt.toISOString() : null,
           };

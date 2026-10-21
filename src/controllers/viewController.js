@@ -278,14 +278,32 @@ export function createViewController(ctx) {
     },
 
     async getLocation(req, res) {
-      const loc = await BusLocation.findOne({ busId: req.params.bus_id }).populate('schedule', 'scheduleId isReached status').lean();
-      if (!loc) throw notFound('No location found');
-      const body = serializeLocation(loc, config);
       const wanted = req.validatedQuery?.schedule_id;
-      if (wanted && body.schedule_id !== wanted) {
-        throw new AppError(404, 'NO_LOCATION_FOR_TRIP', 'No location has been received for this trip yet');
+      const loc = await BusLocation.findOne({ busId: req.params.bus_id }).populate('schedule', 'scheduleId isReached status').lean();
+      if (!wanted) {
+        // Legacy contract (no schedule_id): 404 when the bus has never reported a position.
+        if (!loc) throw notFound('No location found');
+        return res.json(serializeLocation(loc, config));
       }
-      res.json(body);
+
+      // Trip-scoped read. 404 only when the trip itself doesn't exist (for this bus): a
+      // permanent answer. A real trip without a position yet is an empty result: 200 with
+      // location null and the trip's own state, so a client can tell "not departed" from
+      // "not found" instead of retrying a 404 forever.
+      const trip = await Schedule.findOne({ scheduleId: wanted }, { scheduleId: 1, bus: 1, isReached: 1, status: 1, currentIndex: 1 }).populate('bus', 'busId').lean();
+      if (!trip || trip.bus?.busId !== req.params.bus_id) {
+        throw new AppError(404, 'TRIP_NOT_FOUND', 'No such trip for this bus');
+      }
+      const body = loc ? serializeLocation(loc, config) : null;
+      if (body && body.schedule_id === wanted) return res.json(body);
+      return res.json({
+        bus_id: req.params.bus_id,
+        schedule_id: wanted,
+        location: null,
+        trip_status: trip.status,
+        trip_completed: Boolean(trip.isReached),
+        trip_started: (trip.currentIndex || 0) > 0,
+      });
     },
 
     // Why positions may not be moving: worker liveness, simulation on/off, last tick, last error.

@@ -90,8 +90,9 @@ describe('Pari Chowk -> Saket: a trip that has not started never shows the bus a
     expect(legacy.body).toMatchObject({ schedule_id: a.scheduleId, trip_completed: true });
     // ...and asked for trip B, it has nothing: the page shows "not started", not a bus at Saket.
     const forB = await position(bus.busId, b.scheduleId);
-    expect(forB.status).toBe(404);
-    expect(forB.body.code).toBe('NO_LOCATION_FOR_TRIP');
+    // An existing trip with no position yet is an empty result, not a 404.
+    expect(forB.status).toBe(200);
+    expect(forB.body).toEqual({ bus_id: bus.busId, schedule_id: b.scheduleId, location: null, trip_status: 'on_time', trip_completed: false, trip_started: false });
   });
 
   it('a new trip starts at the origin and advances toward the destination (no inherited coordinates)', async () => {

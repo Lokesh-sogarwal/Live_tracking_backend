@@ -144,7 +144,8 @@ describe('8. generated trips and live tracking', () => {
     expect(await BusLocation.exists({ scheduleId: trip.scheduleId })).toBeNull();
     const { token } = await userWithToken(t.app, 'admin');
     const loc = await request(t.app).get(`/view/get_location/${bus.busId}?schedule_id=${trip.scheduleId}`).set(bearer(token));
-    expect(loc.status).toBe(404);
+    expect(loc.status).toBe(200);
+    expect(loc.body).toMatchObject({ location: null, trip_started: false, trip_completed: false });
     const rows = await request(t.app).get(`/bus/schedules?date=${trip.date}`).set(bearer(token));
     expect(rows.body.find((r) => r.schedule_id === trip.scheduleId)).toMatchObject({ is_reached: false, direction: 'forward', status: 'on_time' });
   });
