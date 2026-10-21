@@ -4,6 +4,7 @@ import {
   Bus, BusLocation, DriverDocument, FEEDBACK_CATEGORIES, Feedback, Notification, PasswordReset, Schedule, Session, User, nextSeq,
 } from '../models/index.js';
 import { generateTemporaryPassword, resolveAdminRequests, setPassword } from '../services/passwordReset.js';
+import { readTrackingStatus } from '../services/workerStatus.js';
 import { can, isAdminRole, roleRank } from '../services/roles.js';
 import { recordLocation, serializeLocation } from '../services/locations.js';
 import { isValidLat, isValidLng } from '../services/geo.js';
@@ -285,6 +286,12 @@ export function createViewController(ctx) {
         throw new AppError(404, 'NO_LOCATION_FOR_TRIP', 'No location has been received for this trip yet');
       }
       res.json(body);
+    },
+
+    // Why positions may not be moving: worker liveness, simulation on/off, last tick, last error.
+    async trackingStatus(_req, res) {
+      res.set('Cache-Control', 'no-store');
+      res.json(await readTrackingStatus(config));
     },
 
     async getRoute(req, res) {

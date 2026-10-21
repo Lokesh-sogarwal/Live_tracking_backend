@@ -9,6 +9,7 @@ import { acquireLease, releaseLease } from './jobs/lock.js';
 import { runDailyScheduleJob, runReverseTripCheck } from './jobs/scheduleJob.js';
 import { runSimulationTick } from './jobs/simulationJob.js';
 import { startLoop } from './jobs/loop.js';
+import { recordHeartbeat, recordScheduleCheck, recordSimulationTick, recordWorkerError } from './services/workerStatus.js';
 
 const LEASE_NAME = 'scheduler-worker';
 const LEASE_MS = 30_000;
@@ -30,6 +31,8 @@ async function main() {
   await ensureIndexes();
   const geo = createGeoService(config, logger);
   const owner = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
+  const instance = randomUUID().slice(0, 8);
+  const startedAt = new Date();
 
   let stopping = false;
   let leader = false;
@@ -40,6 +43,10 @@ async function main() {
       const got = await acquireLease(LEASE_NAME, owner, LEASE_MS);
       if (got !== leader) logger.info({ owner, leader: got }, got ? 'Acquired scheduler lease' : 'Lost scheduler lease');
       leader = got;
+      // Only the leader reports: a standby worker is not running jobs.
+      if (leader) {
+        await recordHeartbeat({ instance, startedAt, simulationEnabled: config.SIMULATION_ENABLED, simulationTickMs: config.SIMULATION_ENABLED ? config.SIMULATION_TICK_MS : null });
+      }
     } catch (err) {
       leader = false;
       logger.error({ err: { message: err.message } }, 'Lease heartbeat failed');
@@ -47,29 +54,37 @@ async function main() {
   };
 
   // Jobs only run while this process holds the lease.
-  const loop = (fn, everyMs) =>
+  const loop = (name, fn, everyMs) =>
     loops.push(
       startLoop(fn, everyMs, {
         shouldRun: () => leader && !stopping,
-        onError: (err) => logger.error({ err: { message: err.message } }, 'Worker job failed'),
+        onError: (err, { failures, retryInMs } = {}) => {
+          logger.error({ err: { message: err.message }, job: name, failures, retryInMs }, 'Worker job failed');
+          recordWorkerError(name, err).catch(() => {});
+        },
       }),
     );
 
   await heartbeat();
   const heartbeatTimer = setInterval(heartbeat, LEASE_MS / 3);
-  loop(async () => {
+  loop('schedules', async () => {
     await runDailyScheduleJob({ config, logger, owner });
     await runReverseTripCheck({ config, logger });
+    await recordScheduleCheck();
   }, SCHEDULE_CHECK_MS);
   logger.info(
     { runAt: config.SCHEDULE_CRON_TIME, timezone: config.APP_TIMEZONE, daysAhead: config.SCHEDULE_DAYS_AHEAD, checkEveryMs: SCHEDULE_CHECK_MS },
     'Daily schedule generation enabled',
   );
   if (config.SIMULATION_ENABLED) {
-    loop(() => runSimulationTick({ config, logger, geo }), config.SIMULATION_TICK_MS);
+    loop('simulation', async () => {
+      const result = await runSimulationTick({ config, logger, geo });
+      await recordSimulationTick(result);
+    }, config.SIMULATION_TICK_MS);
     logger.info({ tickMs: config.SIMULATION_TICK_MS }, 'Location simulation enabled');
   } else {
-    logger.info('Location simulation disabled (set SIMULATION_ENABLED=true to enable)');
+    // warn, not info: with simulation off nothing moves unless real devices report positions.
+    logger.warn('Location simulation disabled (set SIMULATION_ENABLED=true to enable)');
   }
 
   const shutdown = async (signal) => {

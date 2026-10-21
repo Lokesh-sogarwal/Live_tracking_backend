@@ -20,13 +20,15 @@ export async function runSimulationTick({ now = new Date(), config, logger, geo 
     .sort({ arrivalTime: 1 })
     .limit(500)
     .lean();
-  if (!trips.length) return { moved: 0, completed: 0 };
+  if (!trips.length) return { moved: 0, completed: 0, failed: 0, lastError: null };
 
   const routes = new Map((await Route.find({ _id: { $in: trips.map((t) => t.route) } }).lean()).map((r) => [String(r._id), r]));
   const buses = new Map((await Bus.find({ _id: { $in: trips.map((t) => t.bus) } }).lean()).map((b) => [String(b._id), b]));
 
   let moved = 0;
   let completed = 0;
+  let failed = 0;
+  let lastError = null;
   // A bus can only be on one trip at a time. When trips of the same bus overlap, only the
   // earliest-started unfinished one moves; the next starts once it has arrived. Otherwise the
   // bus's single position alternated between trips (and routes) on every tick.
@@ -74,8 +76,11 @@ export async function runSimulationTick({ now = new Date(), config, logger, geo 
       moved += 1;
       if (isReached) completed += 1;
     } catch (err) {
-      logger.warn({ err: { message: err.message }, scheduleId: trip.scheduleId }, 'Simulation step failed');
+      // One trip failing never stops the others; the error is logged with its bus and trip.
+      failed += 1;
+      lastError = { message: err.message, busId: bus.busId, scheduleId: trip.scheduleId };
+      logger.warn({ err: { message: err.message }, busId: bus.busId, scheduleId: trip.scheduleId, operation: 'simulation-step' }, 'Simulation step failed');
     }
   }
-  return { moved, completed };
+  return { moved, completed, failed, lastError };
 }

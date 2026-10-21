@@ -128,6 +128,7 @@ export function buildRouter(ctx, limiters) {
     viewC.uploadDocument,
   );
   v.post('/update_location', auth, validate({ body: viewSchemas.updateLocation }), viewC.updateLocation);
+  v.get('/tracking_status', auth, requireAnyPermission('live_tracking', 'bus_tracking'), viewC.trackingStatus);
   v.get('/get_location/:bus_id', auth, requirePermission('bus_tracking'), validate({ params: viewSchemas.busIdParam, query: viewSchemas.locationQuery }), viewC.getLocation);
   v.get(
     '/api/get_route/:start_lat/:start_lng/:end_lat/:end_lng',

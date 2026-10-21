@@ -1,5 +1,5 @@
 import { BusLocation, LocationEvent } from '../models/index.js';
-import { busRoom, emitTo } from './realtime.js';
+import { busRoom, emitTo, hasIo } from './realtime.js';
 import { markEmitted } from './locationRelay.js';
 import { badRequest, conflict } from '../utils/errors.js';
 import { isValidLat, isValidLng } from './geo.js';
@@ -28,6 +28,13 @@ export async function recordLocation({ bus, lat, lng, recordedAt = new Date(), s
     scheduleId: schedule?.scheduleId ?? null,
   };
 
+  // A process that emits this position itself marks it *before* writing: the relay polls the
+  // collection every second and would otherwise send a row written-but-not-yet-marked a second
+  // time (clients got the same position twice). Without Socket.IO (the worker) nothing is
+  // marked, so the API's relay delivers it.
+  const emitsHere = hasIo();
+  if (emitsHere) markEmitted(bus.busId, at);
+
   const updated = await BusLocation.findOneAndUpdate({ busId: bus.busId, recordedAt: { $lt: at } }, { $set: set }, { new: true });
   let doc = updated;
   if (!doc) {
@@ -51,7 +58,7 @@ export async function recordLocation({ bus, lat, lng, recordedAt = new Date(), s
 
   // Only positions this process actually delivered are marked; otherwise the API's relay
   // (src/services/locationRelay.js) picks them up.
-  if (emitTo(busRoom(bus.busId), 'bus:location', serializeLocation(doc, config))) markEmitted(bus.busId, doc.recordedAt);
+  if (emitsHere) emitTo(busRoom(bus.busId), 'bus:location', serializeLocation(doc, config));
   return doc;
 }
 

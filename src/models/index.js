@@ -368,6 +368,25 @@ const jobLockSchema = new Schema(
 );
 export const JobLock = model('JobLock', jobLockSchema, 'jobLocks');
 
+// Written by the leader worker so the API (and the UI) can tell "the worker is not running"
+// or "simulation is off" apart from a network problem. One document, _id "worker".
+const workerStatusSchema = new Schema(
+  {
+    _id: String,
+    instance: String, // random per process, not a hostname
+    startedAt: Date,
+    heartbeatAt: Date,
+    simulationEnabled: Boolean,
+    simulationTickMs: Number,
+    lastSimulationTickAt: Date,
+    lastSimulationMoved: Number,
+    lastScheduleCheckAt: Date,
+    lastError: { at: Date, job: String, message: String, busId: Number, scheduleId: Number },
+  },
+  { versionKey: false },
+);
+export const WorkerStatus = model('WorkerStatus', workerStatusSchema, 'workerStatus');
+
 const jobRunSchema = new Schema(
   {
     job: { type: String, required: true },
@@ -488,7 +507,7 @@ export const Application = model('Application', applicationSchema, 'applications
 export const ALL_MODELS = [
   Counter, Role, RolePermission, User, Session, Bus, Route, Stop, RouteGeometry, Schedule,
   BusLocation, LocationEvent, DriverDocument, Notification, Feedback, ChatMessage, JobLock, JobRun,
-  PasswordReset, EmailVerification, Application, FeedbackReply,
+  PasswordReset, EmailVerification, Application, FeedbackReply, WorkerStatus,
 ];
 
 // Non-destructive: creates missing indexes, never drops existing ones.

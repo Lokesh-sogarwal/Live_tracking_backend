@@ -1,12 +1,13 @@
 # Render blueprint for the Node backend. Secrets are set in the Render dashboard
 # (sync: false), never committed. Deploy alongside the Flask service until cutover.
+# This file sits at the root of the backend repository (Live_tracking_backend), which *is*
+# the backend: no rootDir. (rootDir: backend-node pointed at a folder that doesn't exist there.)
 services:
   - type: web
     name: live-tracking-api-node
     runtime: node
     region: oregon
     plan: starter
-    rootDir: backend-node
     buildCommand: npm ci --omit=dev
     startCommand: node src/server.js
     healthCheckPath: /health/ready
@@ -43,7 +44,6 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    rootDir: backend-node
     buildCommand: npm ci --omit=dev
     startCommand: node src/worker.js
     envVars:
@@ -53,8 +53,11 @@ services:
         value: Asia/Kolkata
       - key: STORAGE_DRIVER
         value: s3
+      # Daily timetable run at midnight IST, filling today + 7 days (docs/ARCHITECTURE.md).
       - key: SCHEDULE_CRON_TIME
-        value: "10:05"
+        value: "00:00"
+      - key: SCHEDULE_DAYS_AHEAD
+        value: "7"
       - key: SIMULATION_ENABLED
         value: "false"
       - key: MONGODB_URI

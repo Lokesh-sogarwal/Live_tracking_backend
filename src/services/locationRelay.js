@@ -15,6 +15,9 @@ export function markEmitted(busId, recordedAt) {
   lastEmitted.set(busId, new Date(recordedAt).getTime());
 }
 
+// recordedAt (ms) this process last delivered for a bus (or undefined).
+export const lastEmittedAt = (busId) => lastEmitted.get(busId);
+
 export function subscribedBusIds(io) {
   const ids = [];
   for (const [room, members] of io.of('/').adapter.rooms) {
