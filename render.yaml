@@ -1,53 +1,67 @@
+# Render blueprint for the Node backend. Secrets are set in the Render dashboard
+# (sync: false), never committed. Deploy alongside the Flask service until cutover.
 services:
   - type: web
-    name: live-tracking-backend
-    env: python
+    name: live-tracking-api-node
+    runtime: node
     region: oregon
-    plan: free
-    branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -c gunicorn_conf.py app:app
-    healthCheckPath: /healthz
+    plan: starter
+    rootDir: backend-node
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    healthCheckPath: /health/ready
     envVars:
-      - key: LOCAL_DATABASE_URL
-        value: ""
-      - key: DATABASE_URL
-        value: ""
-      - key: SECRET_KEY
-        value: ""
-      - key: JWT_SECRET_KEY
-        value: ""
-      - key: START_SCHEDULERS
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
         value: "1"
-      - key: PORT
-        value: ""
-      - key: REDIS_URL
-        value: ""
-      - key: GUNICORN_WORKERS
-        value: "1"
-      - key: BILLING_GATEWAY
-        value: "dummy"
-      - key: RAZORPAY_KEY_ID
-        value: ""
-      - key: RAZORPAY_KEY_SECRET
-        value: ""
-    # NOTE: Fill the above env var values in the Render dashboard instead of committing secrets here.
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false
+      - key: ORS_API_KEY
+        sync: false
+      - key: UPLOAD_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
 
+  # Exactly one worker instance. A Mongo lease also prevents duplicate runs if a second
+  # instance is started by mistake.
   - type: worker
-    name: live-tracking-scheduler
-    env: python
+    name: live-tracking-worker-node
+    runtime: node
     region: oregon
-    plan: free
-    branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: python scheduler_worker.py
+    plan: starter
+    rootDir: backend-node
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/worker.js
     envVars:
-      - key: LOCAL_DATABASE_URL
-        value: ""
-      - key: DATABASE_URL
-        value: ""
-      - key: SECRET_KEY
-        value: ""
-      - key: START_SCHEDULERS
-        value: "1"
-    # NOTE: Scheduler worker should have DB envs set; keep secrets in Render dashboard.
+      - key: NODE_ENV
+        value: production
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: SCHEDULE_CRON_TIME
+        value: "10:05"
+      - key: SIMULATION_ENABLED
+        value: "false"
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: UPLOAD_BUCKET
+        sync: false
+      - key: ORS_API_KEY
+        sync: false

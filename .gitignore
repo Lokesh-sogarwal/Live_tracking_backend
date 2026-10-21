@@ -1,24 +1,8 @@
-# Ignore local env files and secrets
+node_modules/
 .env
 .env.*
-
-# Python virtualenvs
-.venv/
-venv/
-
-# Byte-compiled / cache
-__pycache__/
-*.pyc
-
-# Uploads and runtime artifacts
-uploads/
-
-# Logs
+!.env.example
+var/
+coverage/
+migration-report*.json
 *.log
-
-# Node (if present)
-/node_modules/
-
-# IDE configs
-.vscode/
-.idea/
