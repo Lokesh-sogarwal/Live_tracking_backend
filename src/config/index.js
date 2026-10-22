@@ -57,6 +57,13 @@ const schema = z.object({
   // Also run the worker jobs inside the API process (`node src/server.js`). For hosts without a
   // background-worker service (e.g. a free Render web service). Off: run `npm run start:worker`.
   RUN_WORKER: bool(false),
+  // Free Render web services sleep after ~15 min without inbound requests. With this on, the
+  // API pings its own public /health/live every KEEP_ALIVE_INTERVAL_MINUTES (must be < 15).
+  // URL: KEEP_ALIVE_URL, else RENDER_EXTERNAL_URL (set by Render for web services).
+  KEEP_ALIVE_ENABLED: bool(false),
+  KEEP_ALIVE_URL: z.string().trim().optional().default(''),
+  RENDER_EXTERNAL_URL: z.string().trim().optional().default(''),
+  KEEP_ALIVE_INTERVAL_MINUTES: int(10).pipe(z.number().int().min(1).max(14)),
   SCHEDULER_ENABLED: bool(true),
   // Daily run time (APP_TIMEZONE, default Asia/Kolkata): midnight. Each run (re)fills the
   // window today .. today + SCHEDULE_DAYS_AHEAD.
@@ -202,6 +209,7 @@ export function loadConfig(env = process.env) {
     frontendOrigins: cfg.FRONTEND_ORIGINS.split(',')
       .map((o) => o.trim().replace(/\/$/, ''))
       .filter(Boolean),
+    keepAliveUrl: cfg.KEEP_ALIVE_URL || cfg.RENDER_EXTERNAL_URL || '',
     mailProvider: cfg.RESEND_API_KEY ? 'resend' : cfg.SMTP_HOST ? 'smtp' : null,
     mailEnabled: Boolean((cfg.RESEND_API_KEY || cfg.SMTP_HOST) && cfg.MAIL_FROM),
     // Emailed links need a real address: never a pattern entry.

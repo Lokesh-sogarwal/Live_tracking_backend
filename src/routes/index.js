@@ -47,7 +47,8 @@ export function buildRouter(ctx, limiters) {
 
   // ---------------- health ----------------
   router.get('/', (_req, res) => res.type('text/plain').send('Backend running successfully'));
-  router.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
+  // Liveness (no database call): what Render's health check and keep-alive pings hit.
+  router.get('/health/live', (_req, res) => res.set('Cache-Control', 'no-store').json({ status: 'ok' }));
   const ready = async (_req, res) => {
     const mongo = await pingMongo();
     res.status(mongo ? 200 : 503).json({ status: mongo ? 'ready' : 'not_ready', checks: { mongo } });

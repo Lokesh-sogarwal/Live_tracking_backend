@@ -10,6 +10,7 @@ import { createStorage } from './services/storage.js';
 import { createApp } from './app.js';
 import { createSocketServer } from './sockets/index.js';
 import { startWorker } from './worker.js';
+import { startKeepAlive } from './services/keepAlive.js';
 
 export async function startServer(env = process.env) {
   const config = loadConfig(env);
@@ -34,6 +35,9 @@ export async function startServer(env = process.env) {
   // RUN_WORKER=true: run the scheduler/simulation in this process too (one service on hosts
   // without background workers). The lease still allows only one active worker overall.
   const worker = config.RUN_WORKER ? await startWorker({ config, logger, geo: ctx.geo }) : null;
+  const keepAlive = config.KEEP_ALIVE_ENABLED
+    ? startKeepAlive({ url: config.keepAliveUrl, intervalMinutes: config.KEEP_ALIVE_INTERVAL_MINUTES, logger })
+    : null;
 
   let closing = false;
   const shutdown = async (signal) => {
@@ -42,6 +46,7 @@ export async function startServer(env = process.env) {
     logger.info({ signal }, 'Shutting down');
     const force = setTimeout(() => process.exit(1), 15_000);
     force.unref();
+    keepAlive?.stop();
     await worker?.stop();
     io.close();
     await new Promise((resolve) => server.close(resolve));
